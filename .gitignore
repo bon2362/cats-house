@@ -1,2 +1,5 @@
 # macOS Finder metadata
 .DS_Store
+
+# Isolated local Git worktrees
+.worktrees/
