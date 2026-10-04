@@ -20,6 +20,10 @@ test('rejects a Gramps-derived file missing from NOTICE', async () => {
   )
 })
 
+test('accepts a Gramps-derived file registered in NOTICE', async () => {
+  await runNoticeCheck('scripts/test-fixtures/registered-notice.js')
+})
+
 test('accepts documentation that only mentions the marker name', async () => {
   await runNoticeCheck('scripts/test-fixtures/marker-documentation.md')
 })

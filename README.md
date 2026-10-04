@@ -34,7 +34,8 @@ node scripts/check-notices.mjs путь/к/файлу
 
 ```sh
 cp .env.example .env
-# Откройте .env и замените демонстрационные пароль и секрет сессии.
+# В .env задайте Argon2-хеш собственного пароля, секрет сессии и режим окружения.
+# Значения replace-* намеренно не позволяют API запуститься.
 
 cd apps/api
 python3 -m venv .venv
@@ -45,7 +46,9 @@ cd ../..
 docker compose up
 ```
 
-Веб-интерфейс будет доступен по адресу `http://localhost:5173`, а API — по адресу `http://localhost:8000/api/v1/health`.
+Для генерации хеша пароля используйте `apps/api/.venv/bin/python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('ваш-пароль'))"`, а для секрета сессии — `apps/api/.venv/bin/python -c "import secrets; print(secrets.token_urlsafe(48))"`. В локальной разработке укажите `CATS_HOUSE_ENVIRONMENT=development`; перед публикацией — `production`, где cookie владельца всегда требует HTTPS.
+
+Веб-интерфейс будет доступен по адресу `http://localhost:5173`, а API — по адресу `http://localhost:8000/api/v1/health`. Порты опубликованы только на `localhost`.
 
 Для полной локальной проверки без удаления данных Docker:
 

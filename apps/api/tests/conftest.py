@@ -24,6 +24,7 @@ def settings(monkeypatch):
         "CATS_HOUSE_SESSION_SECRET",
         "test-session-secret-with-at-least-thirty-two-characters",
     )
+    monkeypatch.setenv("CATS_HOUSE_ENVIRONMENT", "production")
     return Settings()
 
 

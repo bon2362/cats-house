@@ -21,6 +21,7 @@ def set_required_settings(monkeypatch):
         "CATS_HOUSE_SESSION_SECRET",
         "test-session-secret-with-at-least-thirty-two-characters",
     )
+    monkeypatch.setenv("CATS_HOUSE_ENVIRONMENT", "production")
 
 
 def test_settings_reject_missing_database_url(monkeypatch):
@@ -52,3 +53,21 @@ def test_settings_rejects_non_argon2_password_hash(monkeypatch):
 
     with pytest.raises(ValidationError):
         Settings()
+
+
+def test_settings_rejects_example_session_secret(monkeypatch):
+    set_required_settings(monkeypatch)
+    monkeypatch.setenv(
+        "CATS_HOUSE_SESSION_SECRET",
+        "replace-this-with-a-unique-secret-of-at-least-32-characters",
+    )
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_development_environment_disables_secure_cookie_only_for_local_use(monkeypatch):
+    set_required_settings(monkeypatch)
+    monkeypatch.setenv("CATS_HOUSE_ENVIRONMENT", "development")
+
+    assert Settings().session_cookie_secure is False

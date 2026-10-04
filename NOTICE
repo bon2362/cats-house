@@ -3,3 +3,4 @@
 # Формат строк: локальный путь<TAB>путь в исходном репозитории<TAB>авторское уведомление<TAB>лицензия
 # Добавляйте строку до включения в проект кода, перенесённого или адаптированного из Gramps.
 local_path	upstream_path	copyright_notice	license
+scripts/test-fixtures/registered-notice.js	https://github.com/gramps-project/gramps-web	Copyright (C) Gramps Project contributors	AGPL-3.0-or-later

@@ -5,8 +5,11 @@ services:
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     volumes:
       - ./apps/web:/workspace
+      - /workspace/node_modules
+    environment:
+      CATS_HOUSE_API_PROXY_TARGET: http://api:8000
     ports:
-      - "5173:5173"
+      - "127.0.0.1:5173:5173"
     depends_on:
       - api
 
@@ -23,8 +26,9 @@ services:
       CATS_HOUSE_OWNER_EMAIL: ${CATS_HOUSE_OWNER_EMAIL:-owner@example.test}
       CATS_HOUSE_OWNER_PASSWORD_HASH: ${CATS_HOUSE_OWNER_PASSWORD_HASH:?Set CATS_HOUSE_OWNER_PASSWORD_HASH in .env}
       CATS_HOUSE_SESSION_SECRET: ${CATS_HOUSE_SESSION_SECRET:?Set CATS_HOUSE_SESSION_SECRET in .env}
+      CATS_HOUSE_ENVIRONMENT: ${CATS_HOUSE_ENVIRONMENT:?Set CATS_HOUSE_ENVIRONMENT in .env}
     ports:
-      - "8000:8000"
+      - "127.0.0.1:8000:8000"
     depends_on:
       postgres:
         condition: service_healthy
@@ -50,7 +54,7 @@ services:
     environment:
       SERVICES: s3
     ports:
-      - "4566:4566"
+      - "127.0.0.1:4566:4566"
     volumes:
       - minio_data:/var/lib/localstack
 
