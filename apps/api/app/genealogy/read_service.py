@@ -16,6 +16,15 @@ def search_people(session: Session, query: str) -> list[Person]:
     return list(session.scalars(statement))
 
 
+def featured_person(session: Session) -> Person | None:
+    return session.scalar(
+        select(Person)
+        .where(Person.is_archived.is_(False), Person.display_name != "")
+        .order_by(Person.display_name)
+        .limit(1)
+    )
+
+
 def get_public_person(session: Session, person_id: UUID) -> Person | None:
     return session.scalar(select(Person).where(Person.id == person_id, Person.is_archived.is_(False)))
 

@@ -2,6 +2,7 @@ import { LitElement, css, html } from 'lit'
 
 import { ru } from './locales/ru'
 import './pages/home-page'
+import type { FeaturedPerson } from './pages/home-page'
 import './pages/person-card'
 import './pages/tree-page'
 
@@ -24,12 +25,14 @@ export class CatsHouseApp extends LitElement {
     query: { state: true },
     people: { state: true },
     person: { state: true },
+    featuredPerson: { state: true },
   }
 
   private declare connectionState: ConnectionState
   private declare query: string
   private declare people: SearchPerson[]
   private declare person: PublicPerson | null
+  private declare featuredPerson: FeaturedPerson | null
 
   constructor() {
     super()
@@ -37,6 +40,7 @@ export class CatsHouseApp extends LitElement {
     this.query = ''
     this.people = []
     this.person = null
+    this.featuredPerson = null
   }
 
   static styles = css`
@@ -130,7 +134,17 @@ export class CatsHouseApp extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     void this.checkPublicApi()
+    void this.loadFeaturedPerson()
     void this.loadPersonFromPath()
+  }
+
+  private async loadFeaturedPerson() {
+    try {
+      const response = await fetch('/api/v1/people/featured')
+      this.featuredPerson = response.ok ? await response.json() : null
+    } catch {
+      this.featuredPerson = null
+    }
   }
 
   private async loadPersonFromPath() {
@@ -182,7 +196,7 @@ export class CatsHouseApp extends LitElement {
         ? html`<cats-tree-page .rootId=${treeRootId}></cats-tree-page>`
         : this.person
         ? html`<cats-person-card .person=${this.person}></cats-person-card>`
-        : html`<cats-house-home .connectionState=${this.connectionState}></cats-house-home>`}
+        : html`<cats-house-home .connectionState=${this.connectionState} .featuredPerson=${this.featuredPerson}></cats-house-home>`}
     `
   }
 }
