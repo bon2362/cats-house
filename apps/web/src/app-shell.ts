@@ -13,6 +13,7 @@ type PublicPerson = {
   parents: SearchPerson[]
   children: SearchPerson[]
   partners: SearchPerson[]
+  media: { id: string; original_filename: string; url: string }[]
 }
 
 export class CatsHouseApp extends LitElement {

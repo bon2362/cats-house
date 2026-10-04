@@ -94,6 +94,15 @@ class Media(Base):
     is_published: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
+class MediaLink(Base):
+    __tablename__ = "media_links"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    media_id: Mapped[UUID] = mapped_column(ForeignKey("media.id"))
+    person_id: Mapped[UUID | None] = mapped_column(ForeignKey("people.id"), nullable=True)
+    event_id: Mapped[UUID | None] = mapped_column(ForeignKey("events.id"), nullable=True)
+
+
 class ImportIssue(Base):
     __tablename__ = "import_issues"
 

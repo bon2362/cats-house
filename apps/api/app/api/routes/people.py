@@ -1,11 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
-from app.genealogy.read_service import get_public_person, public_events, public_family, search_people
+from app.genealogy.read_service import get_public_person, public_events, public_family, public_person_media, search_people
 
 router = APIRouter()
 
@@ -20,12 +20,19 @@ class EventResponse(BaseModel):
     date_text: str | None
 
 
+class PublicMediaResponse(BaseModel):
+    id: UUID
+    original_filename: str
+    url: str
+
+
 class PersonResponse(PersonSearchResponse):
     biography: str | None
     events: list[EventResponse]
     parents: list[PersonSearchResponse]
     children: list[PersonSearchResponse]
     partners: list[PersonSearchResponse]
+    media: list[PublicMediaResponse]
 
 
 @router.get("/people", response_model=list[PersonSearchResponse])
@@ -34,7 +41,7 @@ def search(query: str = Query(min_length=1), session: Session = Depends(get_sess
 
 
 @router.get("/people/{person_id}", response_model=PersonResponse)
-def get_person(person_id: UUID, session: Session = Depends(get_session)) -> PersonResponse:
+def get_person(person_id: UUID, request: Request, session: Session = Depends(get_session)) -> PersonResponse:
     person = get_public_person(session, person_id)
     if person is None:
         raise HTTPException(status_code=404, detail="Человек не найден.")
@@ -47,4 +54,12 @@ def get_person(person_id: UUID, session: Session = Depends(get_session)) -> Pers
         parents=[PersonSearchResponse(id=related.id, display_name=related.display_name) for related in parents],
         children=[PersonSearchResponse(id=related.id, display_name=related.display_name) for related in children],
         partners=[PersonSearchResponse(id=related.id, display_name=related.display_name) for related in partners],
+        media=[
+            PublicMediaResponse(
+                id=item.id,
+                original_filename=item.original_filename,
+                url=request.app.state.media_storage.public_url(item.storage_key),
+            )
+            for item in public_person_media(session, person.id)
+        ],
     )

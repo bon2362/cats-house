@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models.genealogy import ImportRun, ParentChild, Person, Union
+from app.models.genealogy import ImportRun, Media, MediaLink, ParentChild, Person, Union
 
 
 @pytest.fixture
@@ -75,3 +75,25 @@ def test_public_card_includes_active_family_relationships(client, database_sessi
     assert response.json()["parents"] == [{"id": str(parent.id), "display_name": "Иван"}]
     assert response.json()["children"] == [{"id": str(child.id), "display_name": "Мария"}]
     assert response.json()["partners"] == [{"id": str(partner.id), "display_name": "Пётр"}]
+
+
+def test_public_card_includes_only_published_attached_media(client, database_session):
+    person = add_person(database_session, "Анна")
+    published = Media(storage_key="media/published.jpg", media_type="image/jpeg", original_filename="published.jpg", is_published=True)
+    private = Media(storage_key="media/private.jpg", media_type="image/jpeg", original_filename="private.jpg", is_published=False)
+    database_session.add_all([published, private])
+    database_session.flush()
+    database_session.add_all([MediaLink(media_id=published.id, person_id=person.id), MediaLink(media_id=private.id, person_id=person.id)])
+    database_session.commit()
+
+    class FakeStorage:
+        def public_url(self, key: str) -> str:
+            return f"https://media.example.test/{key}"
+
+    client.app.state.media_storage = FakeStorage()
+    response = client.get(f"/api/v1/people/{person.id}")
+
+    assert response.status_code == 200
+    assert response.json()["media"] == [
+        {"id": str(published.id), "original_filename": "published.jpg", "url": "https://media.example.test/media/published.jpg"}
+    ]

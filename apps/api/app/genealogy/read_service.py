@@ -3,7 +3,7 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models.genealogy import Event, ParentChild, Person, Union
+from app.models.genealogy import Event, Media, MediaLink, ParentChild, Person, Union
 
 
 def search_people(session: Session, query: str) -> list[Person]:
@@ -55,3 +55,14 @@ def public_family(session: Session, person_id: UUID) -> tuple[list[Person], list
         )
     )
     return parents, children, partners
+
+
+def public_person_media(session: Session, person_id: UUID) -> list[Media]:
+    return list(
+        session.scalars(
+            select(Media)
+            .join(MediaLink, MediaLink.media_id == Media.id)
+            .where(MediaLink.person_id == person_id, Media.is_published.is_(True))
+            .order_by(Media.original_filename)
+        )
+    )

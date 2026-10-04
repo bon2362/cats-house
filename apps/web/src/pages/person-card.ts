@@ -2,6 +2,7 @@ import { LitElement, css, html } from 'lit'
 
 type PublicEvent = { event_type: string; date_text: string | null }
 type PublicRelation = { id: string; display_name: string }
+type PublicMedia = { id: string; original_filename: string; url: string }
 type PublicPerson = {
   display_name: string
   biography: string | null
@@ -9,6 +10,7 @@ type PublicPerson = {
   parents: PublicRelation[]
   children: PublicRelation[]
   partners: PublicRelation[]
+  media: PublicMedia[]
 }
 
 export class CatsPersonCard extends LitElement {
@@ -33,6 +35,12 @@ export class CatsPersonCard extends LitElement {
         ${this.renderRelations('Родители', this.person.parents)}
         ${this.renderRelations('Партнёры', this.person.partners)}
         ${this.renderRelations('Дети', this.person.children)}
+        ${this.person.media.length ? html`
+          <section>
+            <h2>Материалы</h2>
+            <ul>${this.person.media.map((item) => html`<li><a href="${item.url}" target="_blank" rel="noopener">${item.original_filename}</a></li>`)}</ul>
+          </section>
+        ` : ''}
       </article>
     `
   }

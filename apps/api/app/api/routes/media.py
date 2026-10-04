@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app.api.dependencies import OwnerSession, require_owner
 from app.db.session import get_session
 from app.media.service import media_key
-from app.models.genealogy import Media
+from app.models.genealogy import ChangeLog, Event, Media, MediaLink, Person
 
 router = APIRouter()
 
@@ -25,6 +25,15 @@ class PublicMediaResponse(BaseModel):
     id: UUID
     original_filename: str
     url: str
+
+
+class MediaLinkCreateRequest(BaseModel):
+    person_id: UUID | None = None
+    event_id: UUID | None = None
+
+
+class MediaLinkCreateResponse(BaseModel):
+    id: UUID
 
 
 @router.post("/admin/media", status_code=status.HTTP_201_CREATED, response_model=MediaResponse)
@@ -55,6 +64,39 @@ def publish_media(media_id: UUID, _: OwnerSession = Depends(require_owner), sess
         raise HTTPException(status_code=404, detail="Материал не найден.")
     media.is_published = True
     session.commit()
+
+
+@router.post("/admin/media/{media_id}/links", status_code=status.HTTP_201_CREATED, response_model=MediaLinkCreateResponse)
+def link_media(
+    media_id: UUID,
+    body: MediaLinkCreateRequest,
+    owner: OwnerSession = Depends(require_owner),
+    session: Session = Depends(get_session),
+) -> MediaLinkCreateResponse:
+    if (body.person_id is None) == (body.event_id is None):
+        raise HTTPException(status_code=422, detail="Укажите человека или событие.")
+    media = session.get(Media, media_id)
+    if media is None:
+        raise HTTPException(status_code=404, detail="Материал не найден.")
+    if body.person_id is not None and session.get(Person, body.person_id) is None:
+        raise HTTPException(status_code=404, detail="Человек не найден.")
+    if body.event_id is not None and session.get(Event, body.event_id) is None:
+        raise HTTPException(status_code=404, detail="Событие не найдено.")
+    link = MediaLink(media_id=media_id, person_id=body.person_id, event_id=body.event_id)
+    session.add(link)
+    session.flush()
+    session.add(
+        ChangeLog(
+            entity_type="media_link",
+            entity_id=link.id,
+            owner_email=owner.email,
+            before={},
+            after={"media_id": str(media_id), "person_id": str(body.person_id) if body.person_id else None, "event_id": str(body.event_id) if body.event_id else None},
+        )
+    )
+    session.commit()
+    session.refresh(link)
+    return MediaLinkCreateResponse(id=link.id)
 
 
 @router.get("/media/{media_id}", response_model=PublicMediaResponse)
