@@ -21,6 +21,12 @@ class MediaResponse(BaseModel):
     is_published: bool
 
 
+class PublicMediaResponse(BaseModel):
+    id: UUID
+    original_filename: str
+    url: str
+
+
 @router.post("/admin/media", status_code=status.HTTP_201_CREATED, response_model=MediaResponse)
 async def upload_media(
     request: Request,
@@ -40,3 +46,20 @@ async def upload_media(
     session.commit()
     session.refresh(media)
     return MediaResponse(id=media.id, original_filename=media.original_filename, is_published=media.is_published)
+
+
+@router.patch("/admin/media/{media_id}/publish", status_code=204)
+def publish_media(media_id: UUID, _: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> None:
+    media = session.get(Media, media_id)
+    if media is None:
+        raise HTTPException(status_code=404, detail="Материал не найден.")
+    media.is_published = True
+    session.commit()
+
+
+@router.get("/media/{media_id}", response_model=PublicMediaResponse)
+def get_media(media_id: UUID, request: Request, session: Session = Depends(get_session)) -> PublicMediaResponse:
+    media = session.get(Media, media_id)
+    if media is None or not media.is_published:
+        raise HTTPException(status_code=404, detail="Материал не найден.")
+    return PublicMediaResponse(id=media.id, original_filename=media.original_filename, url=request.app.state.media_storage.public_url(media.storage_key))

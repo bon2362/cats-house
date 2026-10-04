@@ -13,6 +13,12 @@ class S3MediaStorage:
         client = boto3.client("s3", endpoint_url=str(self._settings.s3_endpoint), region_name="us-east-1")
         client.put_object(Bucket=self._settings.s3_bucket, Key=key, Body=content, ContentType=content_type)
 
+    def public_url(self, key: str) -> str:
+        import boto3
+
+        client = boto3.client("s3", endpoint_url=str(self._settings.s3_endpoint), region_name="us-east-1")
+        return client.generate_presigned_url("get_object", Params={"Bucket": self._settings.s3_bucket, "Key": key}, ExpiresIn=3600)
+
 
 def media_key(filename: str) -> str:
     suffix = filename.rsplit(".", 1)[-1].lower() if "." in filename else "bin"
