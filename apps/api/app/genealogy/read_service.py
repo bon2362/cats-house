@@ -1,9 +1,9 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
-from app.models.genealogy import Event, Person
+from app.models.genealogy import Event, ParentChild, Person, Union
 
 
 def search_people(session: Session, query: str) -> list[Person]:
@@ -22,3 +22,36 @@ def get_public_person(session: Session, person_id: UUID) -> Person | None:
 
 def public_events(session: Session, person_id: UUID) -> list[Event]:
     return list(session.scalars(select(Event).where(Event.person_id == person_id).order_by(Event.date_lower, Event.event_type)))
+
+
+def public_family(session: Session, person_id: UUID) -> tuple[list[Person], list[Person], list[Person]]:
+    active = Person.is_archived.is_(False)
+    parents = list(
+        session.scalars(
+            select(Person)
+            .join(ParentChild, ParentChild.parent_id == Person.id)
+            .where(ParentChild.child_id == person_id, active)
+            .order_by(Person.display_name)
+        )
+    )
+    children = list(
+        session.scalars(
+            select(Person)
+            .join(ParentChild, ParentChild.child_id == Person.id)
+            .where(ParentChild.parent_id == person_id, active)
+            .order_by(Person.display_name)
+        )
+    )
+    partners = list(
+        session.scalars(
+            select(Person)
+            .join(Union, or_(Union.partner_one_id == Person.id, Union.partner_two_id == Person.id))
+            .where(
+                or_(Union.partner_one_id == person_id, Union.partner_two_id == person_id),
+                Person.id != person_id,
+                active,
+            )
+            .order_by(Person.display_name)
+        )
+    )
+    return parents, children, partners

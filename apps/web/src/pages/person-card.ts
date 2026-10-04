@@ -1,7 +1,15 @@
 import { LitElement, css, html } from 'lit'
 
 type PublicEvent = { event_type: string; date_text: string | null }
-type PublicPerson = { display_name: string; biography: string | null; events: PublicEvent[] }
+type PublicRelation = { id: string; display_name: string }
+type PublicPerson = {
+  display_name: string
+  biography: string | null
+  events: PublicEvent[]
+  parents: PublicRelation[]
+  children: PublicRelation[]
+  partners: PublicRelation[]
+}
 
 export class CatsPersonCard extends LitElement {
   static properties = { person: { attribute: false } }
@@ -12,6 +20,7 @@ export class CatsPersonCard extends LitElement {
     :host { display: block; max-width: 42rem; margin: 2rem auto; padding: 1.5rem; }
     h1 { color: var(--cats-ink); font-family: Iowan Old Style, Georgia, serif; font-size: clamp(2rem, 8vw, 4rem); }
     li { margin: 0.5rem 0; color: var(--cats-muted); }
+    a { color: var(--cats-accent); }
   `
 
   render() {
@@ -21,7 +30,20 @@ export class CatsPersonCard extends LitElement {
         ${this.person.biography ? html`<p>${this.person.biography}</p>` : ''}
         <h2>События</h2>
         <ul>${this.person.events.map((event) => html`<li>${event.event_type} ${event.date_text ?? ''}</li>`)}</ul>
+        ${this.renderRelations('Родители', this.person.parents)}
+        ${this.renderRelations('Партнёры', this.person.partners)}
+        ${this.renderRelations('Дети', this.person.children)}
       </article>
+    `
+  }
+
+  private renderRelations(title: string, relations: PublicRelation[]) {
+    if (!relations.length) return ''
+    return html`
+      <section>
+        <h2>${title}</h2>
+        <ul>${relations.map((person) => html`<li><a href="/people/${person.id}">${person.display_name}</a></li>`)}</ul>
+      </section>
     `
   }
 }

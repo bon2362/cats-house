@@ -6,7 +6,14 @@ import './pages/person-card'
 
 type ConnectionState = 'loading' | 'ready' | 'unavailable'
 type SearchPerson = { id: string; display_name: string }
-type PublicPerson = { display_name: string; biography: string | null; events: { event_type: string; date_text: string | null }[] }
+type PublicPerson = {
+  display_name: string
+  biography: string | null
+  events: { event_type: string; date_text: string | null }[]
+  parents: SearchPerson[]
+  children: SearchPerson[]
+  partners: SearchPerson[]
+}
 
 export class CatsHouseApp extends LitElement {
   static properties = {

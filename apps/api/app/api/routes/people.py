@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
-from app.genealogy.read_service import get_public_person, public_events, search_people
+from app.genealogy.read_service import get_public_person, public_events, public_family, search_people
 
 router = APIRouter()
 
@@ -23,6 +23,9 @@ class EventResponse(BaseModel):
 class PersonResponse(PersonSearchResponse):
     biography: str | None
     events: list[EventResponse]
+    parents: list[PersonSearchResponse]
+    children: list[PersonSearchResponse]
+    partners: list[PersonSearchResponse]
 
 
 @router.get("/people", response_model=list[PersonSearchResponse])
@@ -35,9 +38,13 @@ def get_person(person_id: UUID, session: Session = Depends(get_session)) -> Pers
     person = get_public_person(session, person_id)
     if person is None:
         raise HTTPException(status_code=404, detail="Человек не найден.")
+    parents, children, partners = public_family(session, person.id)
     return PersonResponse(
         id=person.id,
         display_name=person.display_name,
         biography=person.biography,
         events=[EventResponse(event_type=event.event_type, date_text=event.date_text) for event in public_events(session, person.id)],
+        parents=[PersonSearchResponse(id=related.id, display_name=related.display_name) for related in parents],
+        children=[PersonSearchResponse(id=related.id, display_name=related.display_name) for related in children],
+        partners=[PersonSearchResponse(id=related.id, display_name=related.display_name) for related in partners],
     )

@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models.genealogy import ChangeLog, Event, ImportRun, Person
+from app.models.genealogy import ChangeLog, Event, ImportRun, ParentChild, Person, Union
 
 
 @pytest.fixture
@@ -18,6 +18,13 @@ def create_person(session) -> Person:
     session.add(run)
     session.flush()
     person = Person(import_run_id=run.id, display_name="Анна", source_uid=str(uuid4()))
+    session.add(person)
+    session.commit()
+    return person
+
+
+def create_related_person(session, import_run_id, name: str) -> Person:
+    person = Person(import_run_id=import_run_id, display_name=name, source_uid=str(uuid4()))
     session.add(person)
     session.commit()
     return person
@@ -65,3 +72,25 @@ def test_owner_creates_person_event_and_change_is_logged(client, database_sessio
     assert response.status_code == 201
     assert database_session.query(Event).filter_by(person_id=person.id, event_type="BIRT").count() == 1
     assert database_session.query(ChangeLog).filter_by(entity_type="event").count() == 1
+
+
+def test_owner_creates_family_links_and_changes_are_logged(client, database_session):
+    parent = create_person(database_session)
+    partner = create_related_person(database_session, parent.import_run_id, "Пётр")
+    child = create_related_person(database_session, parent.import_run_id, "Мария")
+    client.post("/api/v1/auth/login", json={"password": "test-owner-password"})
+
+    union_response = client.post(
+        "/api/v1/admin/unions",
+        json={"partner_one_id": str(parent.id), "partner_two_id": str(partner.id), "union_type": "marriage"},
+    )
+    parent_response = client.post(
+        "/api/v1/admin/parent-links",
+        json={"parent_id": str(parent.id), "child_id": str(child.id), "relationship_type": "biological"},
+    )
+
+    assert union_response.status_code == 201
+    assert parent_response.status_code == 201
+    assert database_session.query(Union).count() == 1
+    assert database_session.query(ParentChild).count() == 1
+    assert database_session.query(ChangeLog).filter(ChangeLog.entity_type.in_(["union", "parent_child"])).count() == 2
