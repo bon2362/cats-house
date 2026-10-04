@@ -26,10 +26,10 @@ def create_at5(path: Path, participant_id: int = 1) -> None:
         CREATE TABLE EventTypes (id INTEGER, db_id INTEGER, gedname TEXT);
         CREATE TABLE EventDetails (p_id INTEGER, p_db_id INTEGER, e_id INTEGER, e_db_id INTEGER, er_id INTEGER, er_db_id INTEGER, e_ord INTEGER, p_ord INTEGER);
         CREATE TABLE EventRoles (id INTEGER, db_id INTEGER, ismain BOOLEAN);
-        INSERT INTO EventTypes VALUES (1, -1, 'BIRT'), (2, -1, 'MARR');
+        INSERT INTO EventTypes VALUES (1, -1, 'BIRT'), (2, -1, 'MARR'), (3, -1, 'OCCU');
         INSERT INTO EventRoles VALUES (1, -1, 1);
-        INSERT INTO Events VALUES (1, 0, 1, -1), (2, 0, 2, -1);
-        INSERT INTO EventDetails VALUES (1, 0, 1, 0, 1, -1, 0, 0), (1, 0, 2, 0, 1, -1, 0, 0), (2, 0, 2, 0, 1, -1, 0, 1);
+        INSERT INTO Events VALUES (1, 0, 1, -1), (2, 0, 2, -1), (3, 0, 3, -1);
+        INSERT INTO EventDetails VALUES (1, 0, 1, 0, 1, -1, 0, 0), (1, 0, 2, 0, 1, -1, 0, 0), (2, 0, 2, 0, 1, -1, 0, 1), (2, 0, 3, 0, 1, -1, 0, 0);
         """
     )
     connection.execute("UPDATE EventDetails SET p_id = ? WHERE e_id = 1", (participant_id,))
@@ -44,10 +44,11 @@ def test_at5_events_replace_gedcom_events_and_match_marriage_to_union(tmp_path):
 
     restored = restore_events_from_at5(preview, at5_path)
 
-    assert restored.counts["events"] == 2
+    assert restored.counts["events"] == 3
     assert {(event.event_type, event.person_pointer, event.union_pointer) for event in restored.events} == {
         ("BIRT", "@I1@", None),
         ("MARR", None, "@F1@"),
+        ("OCCU", "@I2@", None),
     }
 
 

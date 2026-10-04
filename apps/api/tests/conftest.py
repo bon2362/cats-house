@@ -50,6 +50,7 @@ def client(settings):
     class ApiClient:
         def __init__(self):
             self.cookies = None
+            self.app = app
 
         def request(self, method, path, json=None, files=None):
             async def send_request():
@@ -70,6 +71,9 @@ def client(settings):
 
         def post(self, path, json=None, files=None):
             return self.request("POST", path, json=json, files=files)
+
+        def patch(self, path, json=None):
+            return self.request("PATCH", path, json=json)
 
     yield ApiClient()
     Base.metadata.drop_all(engine)

@@ -35,6 +35,7 @@ class Person(Base):
     source_uid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sex: Mapped[str | None] = mapped_column(String(32), nullable=True)
     biography: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_archived: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
 class Union(Base):
@@ -89,6 +90,17 @@ class Media(Base):
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     storage_key: Mapped[str] = mapped_column(String(1024))
     media_type: Mapped[str] = mapped_column(String(32))
+    original_filename: Mapped[str] = mapped_column(String(255), default="")
+    is_published: Mapped[bool] = mapped_column(default=False, server_default="false")
+
+
+class MediaLink(Base):
+    __tablename__ = "media_links"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    media_id: Mapped[UUID] = mapped_column(ForeignKey("media.id"))
+    person_id: Mapped[UUID | None] = mapped_column(ForeignKey("people.id"), nullable=True)
+    event_id: Mapped[UUID | None] = mapped_column(ForeignKey("events.id"), nullable=True)
 
 
 class ImportIssue(Base):
@@ -101,3 +113,15 @@ class ImportIssue(Base):
     line_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tag: Mapped[str | None] = mapped_column(String(32), nullable=True)
     import_run: Mapped[ImportRun] = relationship(back_populates="issues")
+
+
+class ChangeLog(Base):
+    __tablename__ = "change_logs"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    entity_type: Mapped[str] = mapped_column(String(64))
+    entity_id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True))
+    owner_email: Mapped[str] = mapped_column(String(255))
+    before: Mapped[dict] = mapped_column(JSONB)
+    after: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

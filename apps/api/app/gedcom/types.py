@@ -27,6 +27,7 @@ class ParsedFamily:
     husband: str | None
     wife: str | None
     children: tuple[str, ...]
+    events: tuple[tuple[str, GenealogyDate | None], ...] = ()
 
 
 @dataclass(frozen=True)

@@ -2,19 +2,41 @@ import { LitElement, css, html } from 'lit'
 
 import { ru } from './locales/ru'
 import './pages/home-page'
+import './pages/person-card'
+import './pages/tree-page'
 
 type ConnectionState = 'loading' | 'ready' | 'unavailable'
+type SearchPerson = { id: string; display_name: string }
+type PublicPerson = {
+  id: string
+  display_name: string
+  biography: string | null
+  events: { event_type: string; date_text: string | null }[]
+  parents: SearchPerson[]
+  children: SearchPerson[]
+  partners: SearchPerson[]
+  media: { id: string; original_filename: string; url: string }[]
+}
 
 export class CatsHouseApp extends LitElement {
   static properties = {
     connectionState: { state: true },
+    query: { state: true },
+    people: { state: true },
+    person: { state: true },
   }
 
   private declare connectionState: ConnectionState
+  private declare query: string
+  private declare people: SearchPerson[]
+  private declare person: PublicPerson | null
 
   constructor() {
     super()
     this.connectionState = 'loading'
+    this.query = ''
+    this.people = []
+    this.person = null
   }
 
   static styles = css`
@@ -108,6 +130,14 @@ export class CatsHouseApp extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     void this.checkPublicApi()
+    void this.loadPersonFromPath()
+  }
+
+  private async loadPersonFromPath() {
+    const match = window.location.pathname.match(/^\/people\/([^/]+)$/)
+    if (!match) return
+    const response = await fetch(`/api/v1/people/${match[1]}`)
+    this.person = response.ok ? await response.json() : null
   }
 
   private async checkPublicApi() {
@@ -122,7 +152,19 @@ export class CatsHouseApp extends LitElement {
     }
   }
 
+  private async searchPeople(event: InputEvent) {
+    this.query = (event.target as HTMLInputElement).value
+    if (!this.query.trim()) {
+      this.people = []
+      return
+    }
+    const response = await fetch(`/api/v1/people?query=${encodeURIComponent(this.query)}`)
+    this.people = response.ok ? await response.json() : []
+  }
+
   render() {
+    const treeRootId = new URLSearchParams(window.location.search).get('person')
+    const isTreePage = window.location.pathname === '/tree'
     return html`
       <header>
         <a class="brand" href="/">${ru.brand}</a>
@@ -131,8 +173,16 @@ export class CatsHouseApp extends LitElement {
           <a href="/search">${ru.search}</a>
           <a class="sign-in" href="/login">${ru.signIn}</a>
         </nav>
+        <section aria-label="Поиск по семье">
+          <input type="search" placeholder="Найти человека" .value=${this.query} @input=${this.searchPeople} />
+          ${this.people.map((person) => html`<a href="/people/${person.id}">${person.display_name}</a>`)}
+        </section>
       </header>
-      <cats-house-home .connectionState=${this.connectionState}></cats-house-home>
+      ${isTreePage
+        ? html`<cats-tree-page .rootId=${treeRootId}></cats-tree-page>`
+        : this.person
+        ? html`<cats-person-card .person=${this.person}></cats-person-card>`
+        : html`<cats-house-home .connectionState=${this.connectionState}></cats-house-home>`}
     `
   }
 }

@@ -55,8 +55,6 @@ def restore_events_from_at5(preview: ImportPreview, path: Path) -> ImportPreview
 
     by_event: dict[tuple[int, int, str], list[tuple[int, bool]]] = {}
     for event_id, database_id, event_type, person_id, is_main in rows:
-        if event_type not in {"BIRT", "DEAT", "MARR"}:
-            continue
         key = (event_id, database_id, event_type)
         by_event.setdefault(key, [])
         if person_id is not None:
@@ -75,14 +73,14 @@ def restore_events_from_at5(preview: ImportPreview, path: Path) -> ImportPreview
             if union_pointer is not None:
                 events.append(PreviewEvent(event_type="MARR", union_pointer=union_pointer))
                 continue
-        person_pointer = main_people[0] if main_people else None
-        events.append(
-            PreviewEvent(
-                event_type=event_type,
-                person_pointer=person_pointer,
-                date=existing_dates.get((person_pointer, event_type)),
+        for person_pointer in main_people:
+            events.append(
+                PreviewEvent(
+                    event_type=event_type,
+                    person_pointer=person_pointer,
+                    date=existing_dates.get((person_pointer, event_type)),
+                )
             )
-        )
 
     counts = {**preview.counts, "events": len(events)}
     return replace(preview, events=tuple(events), counts=counts)

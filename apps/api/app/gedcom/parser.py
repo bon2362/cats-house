@@ -6,6 +6,12 @@ from app.gedcom.types import GenealogyDate, ImportIssue, ImportPreview, ParentLi
 LINE = re.compile(r"^(\d+)\s+(?:(@[^@]+@)\s+)?([A-Z_][A-Z0-9_]*)?(?:\s+(.*))?$")
 DATE = re.compile(r"^(?:(\d{1,2})\s+)?([A-Z]{3})\s+(\d{4})$")
 MONTHS = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6, "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+PERSON_EVENT_TAGS = {
+    "ADOP", "BAPM", "BARM", "BASM", "BIRT", "BLES", "BURI", "CENS", "CHR", "CHRA", "CONF", "CREM",
+    "DEAT", "EDUC", "EMIG", "ENDL", "EVEN", "FCOM", "GRAD", "IMMI", "NATU", "OCCU", "ORDN", "PROB",
+    "PROP", "RELI", "RESI", "RETI", "WILL",
+}
+FAMILY_EVENT_TAGS = {"ANUL", "CENS", "DIV", "DIVF", "ENGA", "MARB", "MARC", "MARL", "MARR", "MARS", "RESI"}
 
 
 def parse_date(value: str) -> GenealogyDate:
@@ -54,13 +60,37 @@ def parse_gedcom(content: bytes) -> ParsedGedcom:
 def _person(pointer, body):
     values = _values(body)
     name = " ".join(values.get("NAME", ["/"])[0].replace("/", " ").split())
-    events = tuple((tag, parse_date(values["DATE"][0]) if values.get("DATE") else None) for tag in ("BIRT", "DEAT") if tag in values)
+    events = tuple(_person_events(body))
     return ParsedPerson(pointer, name, _one(values, "_UID"), _one(values, "SEX"), _one(values, "FAMC"), tuple(values.get("FAMS", [])), events)
+
+
+def _person_events(body):
+    yield from _record_events(body, PERSON_EVENT_TAGS)
+
+
+def _record_events(body, event_tags):
+    for index, (level, tag, _value, _line) in enumerate(body):
+        if level != 1 or tag not in event_tags:
+            continue
+        date_text = None
+        for nested_level, nested_tag, nested_value, _nested_line in body[index + 1:]:
+            if nested_level <= 1:
+                break
+            if nested_tag == "DATE":
+                date_text = nested_value
+                break
+        yield tag, parse_date(date_text) if date_text else None
 
 
 def _family(pointer, body):
     values = _values(body)
-    return ParsedFamily(pointer, _one(values, "HUSB"), _one(values, "WIFE"), tuple(values.get("CHIL", [])))
+    return ParsedFamily(
+        pointer,
+        _one(values, "HUSB"),
+        _one(values, "WIFE"),
+        tuple(values.get("CHIL", [])),
+        tuple(_record_events(body, FAMILY_EVENT_TAGS)),
+    )
 
 
 def _values(body):
@@ -90,5 +120,9 @@ def build_preview(parsed: ParsedGedcom) -> ImportPreview:
         PreviewEvent(event_type=tag, person_pointer=person.pointer, date=event_date)
         for person in parsed.people
         for tag, event_date in person.events
+    ) + tuple(
+        PreviewEvent(event_type=tag, union_pointer=family.pointer, date=event_date)
+        for family in parsed.families
+        for tag, event_date in family.events
     )
     return ImportPreview(parsed.people, parsed.families, tuple(links), events, tuple(issues), {"people": len(parsed.people), "unions": len(parsed.families), "parent_links": len(links), "events": len(events)})

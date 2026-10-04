@@ -2,13 +2,14 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
 
 from app.api.dependencies import OwnerSession, require_owner
-from app.auth.service import verify_owner_password
+from app.auth.service import verify_owner_password, verify_totp
 
 router = APIRouter()
 
 
 class LoginRequest(BaseModel):
     password: str
+    totp_code: str | None = None
 
 
 @router.post("/auth/login", status_code=status.HTTP_204_NO_CONTENT)
@@ -19,6 +20,11 @@ def login_owner(payload: LoginRequest, request: Request) -> Response:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Неверный пароль.",
+        )
+    if settings.owner_totp_secret and not verify_totp(payload.totp_code, settings.owner_totp_secret.get_secret_value()):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Неверный одноразовый код.",
         )
 
     request.session["owner_email"] = settings.owner_email

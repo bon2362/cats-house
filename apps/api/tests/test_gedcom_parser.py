@@ -37,3 +37,41 @@ def test_parser_reports_missing_person_reference_with_line_number():
     issue = next(issue for issue in preview.issues if issue.severity == "error")
     assert issue.line_number == 7
     assert "@I404@" in issue.message
+
+
+def test_parser_keeps_standard_person_events_with_their_dates():
+    preview = build_preview(
+        parse_gedcom(
+            b"""0 @I1@ INDI
+1 NAME Anna /Ivanova/
+1 BIRT
+2 DATE 1900
+1 OCCU Teacher
+2 DATE 1920
+0 TRLR
+"""
+        )
+    )
+
+    assert [(event.event_type, event.date.text if event.date else None) for event in preview.events] == [
+        ("BIRT", "1900"),
+        ("OCCU", "1920"),
+    ]
+
+
+def test_parser_keeps_family_events_with_their_dates():
+    preview = build_preview(parse_gedcom(b"""0 @I1@ INDI
+1 NAME Anna /Ivanova/
+0 @I2@ INDI
+1 NAME Petr /Ivanov/
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1920
+0 TRLR
+"""))
+
+    assert [(event.event_type, event.union_pointer, event.date.text if event.date else None) for event in preview.events] == [
+        ("MARR", "@F1@", "1920"),
+    ]
