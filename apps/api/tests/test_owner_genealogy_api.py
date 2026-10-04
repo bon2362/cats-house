@@ -1,0 +1,44 @@
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
+
+from app.models.genealogy import ChangeLog, ImportRun, Person
+
+
+@pytest.fixture
+def database_session(client, settings):
+    with Session(create_engine(settings.database_url)) as session:
+        yield session
+
+
+def create_person(session) -> Person:
+    run = ImportRun(original_filename="family.ged", sha256="0" * 64, state="applied", normalized_payload={}, counts={})
+    session.add(run)
+    session.flush()
+    person = Person(import_run_id=run.id, display_name="Анна", source_uid=str(uuid4()))
+    session.add(person)
+    session.commit()
+    return person
+
+
+def test_anonymous_client_cannot_edit_person(client, database_session):
+    person = create_person(database_session)
+
+    response = client.patch(f"/api/v1/admin/people/{person.id}", json={"display_name": "Анна Иванова"})
+
+    assert response.status_code == 401
+
+
+def test_owner_can_edit_person_and_change_is_logged(client, database_session):
+    person = create_person(database_session)
+    client.post("/api/v1/auth/login", json={"password": "test-owner-password"})
+
+    response = client.patch(f"/api/v1/admin/people/{person.id}", json={"display_name": "Анна Иванова"})
+
+    assert response.status_code == 200
+    assert response.json()["display_name"] == "Анна Иванова"
+    entry = database_session.query(ChangeLog).one()
+    assert entry.before == {"display_name": "Анна"}
+    assert entry.after == {"display_name": "Анна Иванова"}

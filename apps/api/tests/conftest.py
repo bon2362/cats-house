@@ -71,5 +71,8 @@ def client(settings):
         def post(self, path, json=None, files=None):
             return self.request("POST", path, json=json, files=files)
 
+        def patch(self, path, json=None):
+            return self.request("PATCH", path, json=json)
+
     yield ApiClient()
     Base.metadata.drop_all(engine)
