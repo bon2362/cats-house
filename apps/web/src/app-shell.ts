@@ -4,17 +4,24 @@ import { ru } from './locales/ru'
 import './pages/home-page'
 
 type ConnectionState = 'loading' | 'ready' | 'unavailable'
+type SearchPerson = { id: string; display_name: string }
 
 export class CatsHouseApp extends LitElement {
   static properties = {
     connectionState: { state: true },
+    query: { state: true },
+    people: { state: true },
   }
 
   private declare connectionState: ConnectionState
+  private declare query: string
+  private declare people: SearchPerson[]
 
   constructor() {
     super()
     this.connectionState = 'loading'
+    this.query = ''
+    this.people = []
   }
 
   static styles = css`
@@ -122,6 +129,16 @@ export class CatsHouseApp extends LitElement {
     }
   }
 
+  private async searchPeople(event: InputEvent) {
+    this.query = (event.target as HTMLInputElement).value
+    if (!this.query.trim()) {
+      this.people = []
+      return
+    }
+    const response = await fetch(`/api/v1/people?query=${encodeURIComponent(this.query)}`)
+    this.people = response.ok ? await response.json() : []
+  }
+
   render() {
     return html`
       <header>
@@ -131,6 +148,10 @@ export class CatsHouseApp extends LitElement {
           <a href="/search">${ru.search}</a>
           <a class="sign-in" href="/login">${ru.signIn}</a>
         </nav>
+        <section aria-label="Поиск по семье">
+          <input type="search" placeholder="Найти человека" .value=${this.query} @input=${this.searchPeople} />
+          ${this.people.map((person) => html`<a href="/people/${person.id}">${person.display_name}</a>`)}
+        </section>
       </header>
       <cats-house-home .connectionState=${this.connectionState}></cats-house-home>
     `

@@ -36,4 +36,22 @@ describe('cats-house-app', () => {
     await homePage?.updateComplete
     expect(homePage?.shadowRoot?.textContent).toContain('Не удалось связаться с сайтом')
   })
+
+  it('shows people returned by the public search API', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(new Response('{}'))
+        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'person-1', display_name: 'Анна Иванова' }]))),
+    )
+    const element = await renderApp()
+    const search = element.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]')
+
+    search!.value = 'Анна'
+    search!.dispatchEvent(new Event('input'))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await element.updateComplete
+
+    expect(element.shadowRoot?.textContent).toContain('Анна Иванова')
+  })
 })
