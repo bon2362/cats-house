@@ -34,3 +34,20 @@ def test_descendant_tree_respects_depth(client, database_session):
 
     assert response.status_code == 200
     assert {person["display_name"] for person in response.json()["people"]} == {"Анна", "Борис"}
+
+
+def test_ancestor_and_mixed_tree_include_parents(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="1" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    parent = create_person(database_session, run, "Анна")
+    root = create_person(database_session, run, "Борис")
+    child = create_person(database_session, run, "Вера")
+    database_session.add_all((ParentChild(parent_id=parent.id, child_id=root.id), ParentChild(parent_id=root.id, child_id=child.id)))
+    database_session.commit()
+
+    ancestors = client.get(f"/api/v1/tree/{root.id}?mode=ancestors&depth=1")
+    mixed = client.get(f"/api/v1/tree/{root.id}?mode=mixed&depth=1")
+
+    assert {person["display_name"] for person in ancestors.json()["people"]} == {"Анна", "Борис"}
+    assert {person["display_name"] for person in mixed.json()["people"]} == {"Анна", "Борис", "Вера"}

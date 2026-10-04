@@ -24,7 +24,7 @@ class TreeResponse(BaseModel):
 @router.get("/tree/{person_id}", response_model=TreeResponse)
 def get_tree(
     person_id: UUID,
-    mode: str = Query(pattern="^(descendants)$"),
+    mode: str = Query(pattern="^(ancestors|descendants|mixed)$"),
     depth: int = Query(default=2, ge=0, le=5),
     session: Session = Depends(get_session),
 ) -> TreeResponse:
@@ -38,11 +38,15 @@ def get_tree(
         parent_id, level = queue.popleft()
         if level >= depth:
             continue
-        child_ids = session.scalars(select(ParentChild.child_id).where(ParentChild.parent_id == parent_id)).all()
-        children = session.scalars(select(Person).where(Person.id.in_(child_ids), Person.is_archived.is_(False))).all()
-        for child in children:
-            if child.id not in seen:
-                seen.add(child.id)
-                people.append(child)
-                queue.append((child.id, level + 1))
+        related_ids = []
+        if mode in {"descendants", "mixed"}:
+            related_ids.extend(session.scalars(select(ParentChild.child_id).where(ParentChild.parent_id == parent_id)).all())
+        if mode in {"ancestors", "mixed"}:
+            related_ids.extend(session.scalars(select(ParentChild.parent_id).where(ParentChild.child_id == parent_id)).all())
+        related_people = session.scalars(select(Person).where(Person.id.in_(related_ids), Person.is_archived.is_(False))).all()
+        for related in related_people:
+            if related.id not in seen:
+                seen.add(related.id)
+                people.append(related)
+                queue.append((related.id, level + 1))
     return TreeResponse(people=[TreePersonResponse(id=person.id, display_name=person.display_name) for person in people])
