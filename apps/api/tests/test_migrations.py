@@ -6,7 +6,9 @@ from sqlalchemy import create_engine, inspect
 
 
 def upgrade_database(database_url: str) -> None:
-    config = Config(str(Path(__file__).parents[1] / "alembic.ini"))
+    api_root = Path(__file__).parents[1]
+    config = Config(str(api_root / "alembic.ini"))
+    config.set_main_option("script_location", str(api_root / "alembic"))
     config.set_main_option("sqlalchemy.url", database_url)
     command.upgrade(config, "head")
 

@@ -36,6 +36,14 @@ class ParentLink:
 
 
 @dataclass(frozen=True)
+class PreviewEvent:
+    event_type: str
+    person_pointer: str | None = None
+    union_pointer: str | None = None
+    date: GenealogyDate | None = None
+
+
+@dataclass(frozen=True)
 class ImportIssue:
     severity: str
     message: str
@@ -55,7 +63,7 @@ class ImportPreview:
     people: tuple[ParsedPerson, ...]
     unions: tuple[ParsedFamily, ...]
     parent_links: tuple[ParentLink, ...]
-    events: tuple[tuple[str, str, GenealogyDate | None], ...]
+    events: tuple[PreviewEvent, ...]
     issues: tuple[ImportIssue, ...]
     counts: dict[str, int]
 

@@ -1,7 +1,7 @@
 import re
 from datetime import date
 
-from app.gedcom.types import GenealogyDate, ImportIssue, ImportPreview, ParentLink, ParsedFamily, ParsedGedcom, ParsedPerson
+from app.gedcom.types import GenealogyDate, ImportIssue, ImportPreview, ParentLink, ParsedFamily, ParsedGedcom, ParsedPerson, PreviewEvent
 
 LINE = re.compile(r"^(\d+)\s+(?:(@[^@]+@)\s+)?([A-Z_][A-Z0-9_]*)?(?:\s+(.*))?$")
 DATE = re.compile(r"^(?:(\d{1,2})\s+)?([A-Z]{3})\s+(\d{4})$")
@@ -86,5 +86,9 @@ def build_preview(parsed: ParsedGedcom) -> ImportPreview:
         for parent in (family.husband, family.wife):
             if parent:
                 links.extend(ParentLink(parent, child) for child in family.children)
-    events = tuple((person.pointer, tag, event_date) for person in parsed.people for tag, event_date in person.events)
+    events = tuple(
+        PreviewEvent(event_type=tag, person_pointer=person.pointer, date=event_date)
+        for person in parsed.people
+        for tag, event_date in person.events
+    )
     return ImportPreview(parsed.people, parsed.families, tuple(links), events, tuple(issues), {"people": len(parsed.people), "unions": len(parsed.families), "parent_links": len(links), "events": len(events)})
