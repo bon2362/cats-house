@@ -54,4 +54,22 @@ describe('cats-house-app', () => {
 
     expect(element.shadowRoot?.textContent).toContain('Анна Иванова')
   })
+
+  it('loads a public person card from a person URL', async () => {
+    history.pushState({}, '', '/people/person-1')
+    vi.stubGlobal(
+      'fetch',
+      vi.fn()
+        .mockResolvedValueOnce(new Response('{}'))
+        .mockResolvedValueOnce(new Response(JSON.stringify({ display_name: 'Анна Иванова', biography: null, events: [] }))),
+    )
+    const element = await renderApp()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await element.updateComplete
+
+    const card = element.shadowRoot?.querySelector('cats-person-card') as HTMLElement & { updateComplete: Promise<void> }
+    await card.updateComplete
+    expect(card.shadowRoot?.textContent).toContain('Анна Иванова')
+    history.pushState({}, '', '/')
+  })
 })

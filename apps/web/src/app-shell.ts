@@ -2,26 +2,31 @@ import { LitElement, css, html } from 'lit'
 
 import { ru } from './locales/ru'
 import './pages/home-page'
+import './pages/person-card'
 
 type ConnectionState = 'loading' | 'ready' | 'unavailable'
 type SearchPerson = { id: string; display_name: string }
+type PublicPerson = { display_name: string; biography: string | null; events: { event_type: string; date_text: string | null }[] }
 
 export class CatsHouseApp extends LitElement {
   static properties = {
     connectionState: { state: true },
     query: { state: true },
     people: { state: true },
+    person: { state: true },
   }
 
   private declare connectionState: ConnectionState
   private declare query: string
   private declare people: SearchPerson[]
+  private declare person: PublicPerson | null
 
   constructor() {
     super()
     this.connectionState = 'loading'
     this.query = ''
     this.people = []
+    this.person = null
   }
 
   static styles = css`
@@ -115,6 +120,14 @@ export class CatsHouseApp extends LitElement {
   connectedCallback() {
     super.connectedCallback()
     void this.checkPublicApi()
+    void this.loadPersonFromPath()
+  }
+
+  private async loadPersonFromPath() {
+    const match = window.location.pathname.match(/^\/people\/([^/]+)$/)
+    if (!match) return
+    const response = await fetch(`/api/v1/people/${match[1]}`)
+    this.person = response.ok ? await response.json() : null
   }
 
   private async checkPublicApi() {
@@ -153,7 +166,9 @@ export class CatsHouseApp extends LitElement {
           ${this.people.map((person) => html`<a href="/people/${person.id}">${person.display_name}</a>`)}
         </section>
       </header>
-      <cats-house-home .connectionState=${this.connectionState}></cats-house-home>
+      ${this.person
+        ? html`<cats-person-card .person=${this.person}></cats-person-card>`
+        : html`<cats-house-home .connectionState=${this.connectionState}></cats-house-home>`}
     `
   }
 }
