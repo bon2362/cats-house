@@ -8,6 +8,7 @@ version = "0.1.0"
 description = "Собственный API проекта Cat's House"
 requires-python = ">=3.12"
 dependencies = [
+  "boto3>=1.35,<2",
   "alembic>=1.14,<2",
   "argon2-cffi>=23.1,<26",
   "fastapi>=0.115,<1",

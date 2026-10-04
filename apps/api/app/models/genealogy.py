@@ -90,6 +90,8 @@ class Media(Base):
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     storage_key: Mapped[str] = mapped_column(String(1024))
     media_type: Mapped[str] = mapped_column(String(32))
+    original_filename: Mapped[str] = mapped_column(String(255), default="")
+    is_published: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
 class ImportIssue(Base):

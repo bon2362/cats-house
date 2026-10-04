@@ -1,0 +1,1 @@
+"""Media object storage integration."""

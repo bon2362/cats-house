@@ -50,6 +50,7 @@ def client(settings):
     class ApiClient:
         def __init__(self):
             self.cookies = None
+            self.app = app
 
         def request(self, method, path, json=None, files=None):
             async def send_request():
