@@ -11,6 +11,7 @@ PERSON_EVENT_TAGS = {
     "DEAT", "EDUC", "EMIG", "ENDL", "EVEN", "FCOM", "GRAD", "IMMI", "NATU", "OCCU", "ORDN", "PROB",
     "PROP", "RELI", "RESI", "RETI", "WILL",
 }
+FAMILY_EVENT_TAGS = {"ANUL", "CENS", "DIV", "DIVF", "ENGA", "MARB", "MARC", "MARL", "MARR", "MARS", "RESI"}
 
 
 def parse_date(value: str) -> GenealogyDate:
@@ -64,8 +65,12 @@ def _person(pointer, body):
 
 
 def _person_events(body):
+    yield from _record_events(body, PERSON_EVENT_TAGS)
+
+
+def _record_events(body, event_tags):
     for index, (level, tag, _value, _line) in enumerate(body):
-        if level != 1 or tag not in PERSON_EVENT_TAGS:
+        if level != 1 or tag not in event_tags:
             continue
         date_text = None
         for nested_level, nested_tag, nested_value, _nested_line in body[index + 1:]:
@@ -79,7 +84,13 @@ def _person_events(body):
 
 def _family(pointer, body):
     values = _values(body)
-    return ParsedFamily(pointer, _one(values, "HUSB"), _one(values, "WIFE"), tuple(values.get("CHIL", [])))
+    return ParsedFamily(
+        pointer,
+        _one(values, "HUSB"),
+        _one(values, "WIFE"),
+        tuple(values.get("CHIL", [])),
+        tuple(_record_events(body, FAMILY_EVENT_TAGS)),
+    )
 
 
 def _values(body):
@@ -109,5 +120,9 @@ def build_preview(parsed: ParsedGedcom) -> ImportPreview:
         PreviewEvent(event_type=tag, person_pointer=person.pointer, date=event_date)
         for person in parsed.people
         for tag, event_date in person.events
+    ) + tuple(
+        PreviewEvent(event_type=tag, union_pointer=family.pointer, date=event_date)
+        for family in parsed.families
+        for tag, event_date in family.events
     )
     return ImportPreview(parsed.people, parsed.families, tuple(links), events, tuple(issues), {"people": len(parsed.people), "unions": len(parsed.families), "parent_links": len(links), "events": len(events)})

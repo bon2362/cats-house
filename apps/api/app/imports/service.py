@@ -82,6 +82,7 @@ def apply_preview(session: Session, import_id: UUID) -> ImportRun:
                 if parent_pointer:
                     for child_pointer in raw_family["children"]:
                         session.add(ParentChild(parent_id=_person_id(people_by_pointer, parent_pointer), child_id=_person_id(people_by_pointer, child_pointer)))
+        session.flush()
 
         for raw_event in payload["events"]:
             raw_date = raw_event["date"]

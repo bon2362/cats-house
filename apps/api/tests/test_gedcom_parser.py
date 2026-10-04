@@ -57,3 +57,21 @@ def test_parser_keeps_standard_person_events_with_their_dates():
         ("BIRT", "1900"),
         ("OCCU", "1920"),
     ]
+
+
+def test_parser_keeps_family_events_with_their_dates():
+    preview = build_preview(parse_gedcom(b"""0 @I1@ INDI
+1 NAME Anna /Ivanova/
+0 @I2@ INDI
+1 NAME Petr /Ivanov/
+0 @F1@ FAM
+1 HUSB @I1@
+1 WIFE @I2@
+1 MARR
+2 DATE 1920
+0 TRLR
+"""))
+
+    assert [(event.event_type, event.union_pointer, event.date.text if event.date else None) for event in preview.events] == [
+        ("MARR", "@F1@", "1920"),
+    ]

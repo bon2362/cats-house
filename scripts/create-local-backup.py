@@ -13,6 +13,7 @@ sys.path.insert(0, str(ROOT / "apps" / "api"))
 from app.core.config import Settings
 from app.db.session import create_session_factory
 from app.exports.service import build_archive, export_gedcom
+from app.media.service import S3MediaStorage
 
 
 def main() -> int:
@@ -26,6 +27,13 @@ def main() -> int:
     settings = Settings()
     with create_session_factory(settings.database_url)() as session:
         archive = build_archive(session)
+        storage = S3MediaStorage(settings)
+        media_dir = args.output / f"cats-house-{stamp}-media"
+        for item in archive["media_manifest"]:
+            media_dir.mkdir(exist_ok=True)
+            filename = f"{item['archive_id']}.bin"
+            (media_dir / filename).write_bytes(storage.get(item["storage_key"]))
+            item["backup_file"] = f"{media_dir.name}/{filename}"
         (args.output / f"cats-house-{stamp}.json").write_text(json.dumps(archive, ensure_ascii=False, indent=2), encoding="utf-8")
         (args.output / f"cats-house-{stamp}.ged").write_bytes(export_gedcom(session))
     print(f"Создана копия: {stamp}; люди: {archive['counts']['people']}; события: {archive['counts']['events']}")
