@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models.genealogy import ChangeLog, ImportRun, Person
+from app.models.genealogy import ChangeLog, Event, ImportRun, Person
 
 
 @pytest.fixture
@@ -54,3 +54,14 @@ def test_owner_archives_person_without_deleting_it(client, database_session):
     database_session.expire_all()
     assert database_session.get(Person, person.id).is_archived is True
     assert client.get("/api/v1/people?query=Анна").json() == []
+
+
+def test_owner_creates_person_event_and_change_is_logged(client, database_session):
+    person = create_person(database_session)
+    client.post("/api/v1/auth/login", json={"password": "test-owner-password"})
+
+    response = client.post(f"/api/v1/admin/people/{person.id}/events", json={"event_type": "BIRT", "date_text": "1900"})
+
+    assert response.status_code == 201
+    assert database_session.query(Event).filter_by(person_id=person.id, event_type="BIRT").count() == 1
+    assert database_session.query(ChangeLog).filter_by(entity_type="event").count() == 1
