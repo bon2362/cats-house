@@ -61,7 +61,9 @@ describe('cats-house-app', () => {
       'fetch',
       vi.fn()
         .mockResolvedValueOnce(new Response('{}'))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ display_name: 'Анна Иванова', biography: null, events: [] }))),
+        .mockResolvedValueOnce(new Response(JSON.stringify({
+          id: 'person-1', display_name: 'Анна Иванова', biography: null, events: [], parents: [], children: [], partners: [], media: [],
+        }))),
     )
     const element = await renderApp()
     await new Promise((resolve) => setTimeout(resolve, 0))

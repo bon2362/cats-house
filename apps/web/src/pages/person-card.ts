@@ -34,13 +34,13 @@ export class CatsPersonCard extends LitElement {
         ${this.person.biography ? html`<p>${this.person.biography}</p>` : ''}
         <h2>События</h2>
         <ul>${this.person.events.map((event) => html`<li>${event.event_type} ${event.date_text ?? ''}</li>`)}</ul>
-        ${this.renderRelations('Родители', this.person.parents)}
-        ${this.renderRelations('Партнёры', this.person.partners)}
-        ${this.renderRelations('Дети', this.person.children)}
-        ${this.person.media.length ? html`
+        ${this.renderRelations('Родители', this.person.parents ?? [])}
+        ${this.renderRelations('Партнёры', this.person.partners ?? [])}
+        ${this.renderRelations('Дети', this.person.children ?? [])}
+        ${(this.person.media ?? []).length ? html`
           <section>
             <h2>Материалы</h2>
-            <ul>${this.person.media.map((item) => html`<li><a href="${item.url}" target="_blank" rel="noopener">${item.original_filename}</a></li>`)}</ul>
+            <ul>${(this.person.media ?? []).map((item) => html`<li><a href="${item.url}" target="_blank" rel="noopener">${item.original_filename}</a></li>`)}</ul>
           </section>
         ` : ''}
       </article>
