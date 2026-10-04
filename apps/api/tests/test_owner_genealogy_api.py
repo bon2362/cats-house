@@ -42,3 +42,15 @@ def test_owner_can_edit_person_and_change_is_logged(client, database_session):
     entry = database_session.query(ChangeLog).one()
     assert entry.before == {"display_name": "Анна"}
     assert entry.after == {"display_name": "Анна Иванова"}
+
+
+def test_owner_archives_person_without_deleting_it(client, database_session):
+    person = create_person(database_session)
+    client.post("/api/v1/auth/login", json={"password": "test-owner-password"})
+
+    response = client.post(f"/api/v1/admin/people/{person.id}/archive")
+
+    assert response.status_code == 204
+    database_session.expire_all()
+    assert database_session.get(Person, person.id).is_archived is True
+    assert client.get("/api/v1/people?query=Анна").json() == []

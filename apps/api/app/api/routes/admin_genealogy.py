@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.api.dependencies import OwnerSession, require_owner
 from app.db.session import get_session
-from app.genealogy.write_service import rename_person
+from app.genealogy.write_service import archive_person, rename_person
 
 router = APIRouter()
 
@@ -32,3 +32,11 @@ def update_person(
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     return PersonUpdateResponse(id=person.id, display_name=person.display_name)
+
+
+@router.post("/admin/people/{person_id}/archive", status_code=204)
+def archive(person_id: UUID, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> None:
+    try:
+        archive_person(session, person_id, owner.email)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error

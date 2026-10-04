@@ -15,3 +15,14 @@ def rename_person(session: Session, person_id: UUID, display_name: str, owner_em
     session.commit()
     session.refresh(person)
     return person
+
+
+def archive_person(session: Session, person_id: UUID, owner_email: str) -> Person:
+    person = session.get(Person, person_id)
+    if person is None:
+        raise LookupError("Человек не найден.")
+    person.is_archived = True
+    session.add(ChangeLog(entity_type="person", entity_id=person.id, owner_email=owner_email, before={"is_archived": False}, after={"is_archived": True}))
+    session.commit()
+    session.refresh(person)
+    return person
