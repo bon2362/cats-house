@@ -1,0 +1,25 @@
+0 HEAD
+1 CHAR UTF-8
+0 @I1@ INDI
+1 NAME Анна /Иванова/
+1 FAMS @F1@
+1 FAMS @F2@
+0 @I2@ INDI
+1 NAME Борис /Петров/
+0 @I3@ INDI
+1 NAME Вера /Сидорова/
+0 @I4@ INDI
+1 NAME Галина /Иванова/
+1 FAMC @F1@
+0 @I5@ INDI
+1 NAME Дмитрий /Иванов/
+1 FAMC @F2@
+0 @F1@ FAM
+1 WIFE @I1@
+1 HUSB @I2@
+1 CHIL @I4@
+0 @F2@ FAM
+1 WIFE @I1@
+1 HUSB @I3@
+1 CHIL @I5@
+0 TRLR
