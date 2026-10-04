@@ -3,17 +3,21 @@ import { LitElement, css, html } from 'lit'
 import { ru } from '../locales/ru'
 
 export type ConnectionState = 'loading' | 'ready' | 'unavailable'
+export type FeaturedPerson = { id: string; display_name: string }
 
 export class CatsHouseHome extends LitElement {
   static properties = {
     connectionState: { attribute: false },
+    featuredPerson: { attribute: false },
   }
 
   declare connectionState: ConnectionState
+  declare featuredPerson: FeaturedPerson | null
 
   constructor() {
     super()
     this.connectionState = 'loading'
+    this.featuredPerson = null
   }
 
   static styles = css`
@@ -37,6 +41,30 @@ export class CatsHouseHome extends LitElement {
       font-weight: 700;
       letter-spacing: 0.12em;
       text-transform: uppercase;
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      margin-top: 2rem;
+    }
+
+    .action {
+      border: 1px solid var(--cats-accent);
+      border-radius: 999px;
+      color: var(--cats-accent);
+      font-size: 0.9rem;
+      font-weight: 700;
+      padding: 0.65rem 1rem;
+      text-decoration: none;
+      transition: background 180ms ease, color 180ms ease;
+    }
+
+    .action:hover,
+    .action:focus-visible {
+      background: var(--cats-accent);
+      color: var(--cats-paper);
     }
 
     h1 {
@@ -79,16 +107,27 @@ export class CatsHouseHome extends LitElement {
 
   render() {
     const unavailable = this.connectionState === 'unavailable'
+    const featuredPerson = this.featuredPerson
 
     return html`
       <section aria-live="polite">
         <span class="eyebrow">${ru.familyArchive}</span>
         <h1>${ru.brand}</h1>
-        <p>${unavailable ? ru.apiUnavailableHelp : ru.startMessage}</p>
-        <span class="status ${unavailable ? 'unavailable' : ''}">
-          <span class="dot" aria-hidden="true"></span>
-          ${unavailable ? ru.apiUnavailable : ru.preparingTree}
-        </span>
+        <p>${unavailable ? ru.apiUnavailableHelp : featuredPerson ? ru.startMessage : ru.noPeopleYet}</p>
+        ${featuredPerson
+          ? html`
+              <p class="status">${featuredPerson.display_name}</p>
+              <div class="actions">
+                <a class="action" href="/tree?person=${featuredPerson.id}">${ru.openTree}</a>
+                <a class="action" href="/people/${featuredPerson.id}">${ru.openPersonCard}</a>
+              </div>
+            `
+          : html`
+              <span class="status ${unavailable ? 'unavailable' : ''}">
+                <span class="dot" aria-hidden="true"></span>
+                ${unavailable ? ru.apiUnavailable : ru.noPeopleYet}
+              </span>
+            `}
       </section>
     `
   }

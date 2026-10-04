@@ -37,12 +37,32 @@ describe('cats-house-app', () => {
     expect(homePage?.shadowRoot?.textContent).toContain('Не удалось связаться с сайтом')
   })
 
-  it('shows people returned by the public search API', async () => {
+  it('shows a featured person and a link to their tree on the home page', async () => {
     vi.stubGlobal(
       'fetch',
       vi.fn()
         .mockResolvedValueOnce(new Response('{}'))
-        .mockResolvedValueOnce(new Response(JSON.stringify([{ id: 'person-1', display_name: 'Анна Иванова' }]))),
+        .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'person-1', display_name: 'Анна Иванова' }))),
+    )
+    const element = await renderApp()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await element.updateComplete
+
+    const homePage = element.shadowRoot?.querySelector<CatsHouseHome>('cats-house-home')
+    await homePage?.updateComplete
+    expect(homePage?.shadowRoot?.textContent).toContain('Анна Иванова')
+    expect(homePage?.shadowRoot?.querySelector('a[href="/tree?person=person-1"]')).not.toBeNull()
+  })
+
+  it('shows people returned by the public search API', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).includes('query=')) {
+          return Promise.resolve(new Response(JSON.stringify([{ id: 'person-1', display_name: 'Анна Иванова' }])))
+        }
+        return Promise.resolve(new Response('{}', { status: 404 }))
+      }),
     )
     const element = await renderApp()
     const search = element.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]')
@@ -59,11 +79,14 @@ describe('cats-house-app', () => {
     history.pushState({}, '', '/people/person-1')
     vi.stubGlobal(
       'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(new Response('{}'))
-        .mockResolvedValueOnce(new Response(JSON.stringify({
-          id: 'person-1', display_name: 'Анна Иванова', biography: null, events: [], parents: [], children: [], partners: [], media: [],
-        }))),
+      vi.fn((input: RequestInfo | URL) => {
+        if (String(input).endsWith('/people/person-1')) {
+          return Promise.resolve(new Response(JSON.stringify({
+            id: 'person-1', display_name: 'Анна Иванова', biography: null, events: [], parents: [], children: [], partners: [], media: [],
+          })))
+        }
+        return Promise.resolve(new Response('{}', { status: 404 }))
+      }),
     )
     const element = await renderApp()
     await new Promise((resolve) => setTimeout(resolve, 0))

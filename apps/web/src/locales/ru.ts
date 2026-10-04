@@ -4,8 +4,10 @@ export const ru = {
   search: 'Поиск',
   signIn: 'Войти',
   familyArchive: 'Семейный архив',
-  startMessage: 'Здесь появится ваше семейное дерево.',
-  preparingTree: 'Подготавливаем дерево',
+  startMessage: 'Начните знакомство с семейным архивом с одного из его участников.',
+  openTree: 'Открыть дерево',
+  openPersonCard: 'Карточка человека',
+  noPeopleYet: 'В семейном архиве пока нет людей.',
   apiUnavailable: 'Не удалось связаться с сайтом',
   apiUnavailableHelp: 'Попробуйте обновить страницу немного позже.',
 } as const

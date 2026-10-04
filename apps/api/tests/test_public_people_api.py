@@ -51,6 +51,19 @@ def test_public_search_excludes_archived_person(client, database_session):
     assert response.json() == []
 
 
+def test_featured_person_returns_the_first_active_person_without_login(client, database_session):
+    hidden = add_person(database_session, "Алексей Скрытый", archived=True)
+    visible = add_person(database_session, "Борис Видимый")
+    add_person(database_session, "Владимир Поздний")
+    add_person(database_session, "")
+
+    response = client.get("/api/v1/people/featured")
+
+    assert response.status_code == 200
+    assert response.json() == {"id": str(visible.id), "display_name": "Борис Видимый"}
+    assert response.json()["id"] != str(hidden.id)
+
+
 def test_public_card_includes_active_family_relationships(client, database_session):
     person = add_person(database_session, "Анна")
     parent = Person(import_run_id=person.import_run_id, display_name="Иван", source_uid=str(uuid4()))

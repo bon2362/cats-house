@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
-from app.genealogy.read_service import get_public_person, public_events, public_family, public_person_media, search_people
+from app.genealogy.read_service import featured_person, get_public_person, public_events, public_family, public_person_media, search_people
 
 router = APIRouter()
 
@@ -38,6 +38,14 @@ class PersonResponse(PersonSearchResponse):
 @router.get("/people", response_model=list[PersonSearchResponse])
 def search(query: str = Query(min_length=1), session: Session = Depends(get_session)) -> list[PersonSearchResponse]:
     return [PersonSearchResponse(id=person.id, display_name=person.display_name) for person in search_people(session, query)]
+
+
+@router.get("/people/featured", response_model=PersonSearchResponse)
+def get_featured_person(session: Session = Depends(get_session)) -> PersonSearchResponse:
+    person = featured_person(session)
+    if person is None:
+        raise HTTPException(status_code=404, detail="В семейном архиве пока нет людей.")
+    return PersonSearchResponse(id=person.id, display_name=person.display_name)
 
 
 @router.get("/people/{person_id}", response_model=PersonResponse)
