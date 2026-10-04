@@ -6,6 +6,11 @@ from app.gedcom.types import GenealogyDate, ImportIssue, ImportPreview, ParentLi
 LINE = re.compile(r"^(\d+)\s+(?:(@[^@]+@)\s+)?([A-Z_][A-Z0-9_]*)?(?:\s+(.*))?$")
 DATE = re.compile(r"^(?:(\d{1,2})\s+)?([A-Z]{3})\s+(\d{4})$")
 MONTHS = {"JAN": 1, "FEB": 2, "MAR": 3, "APR": 4, "MAY": 5, "JUN": 6, "JUL": 7, "AUG": 8, "SEP": 9, "OCT": 10, "NOV": 11, "DEC": 12}
+PERSON_EVENT_TAGS = {
+    "ADOP", "BAPM", "BARM", "BASM", "BIRT", "BLES", "BURI", "CENS", "CHR", "CHRA", "CONF", "CREM",
+    "DEAT", "EDUC", "EMIG", "ENDL", "EVEN", "FCOM", "GRAD", "IMMI", "NATU", "OCCU", "ORDN", "PROB",
+    "PROP", "RELI", "RESI", "RETI", "WILL",
+}
 
 
 def parse_date(value: str) -> GenealogyDate:
@@ -54,8 +59,22 @@ def parse_gedcom(content: bytes) -> ParsedGedcom:
 def _person(pointer, body):
     values = _values(body)
     name = " ".join(values.get("NAME", ["/"])[0].replace("/", " ").split())
-    events = tuple((tag, parse_date(values["DATE"][0]) if values.get("DATE") else None) for tag in ("BIRT", "DEAT") if tag in values)
+    events = tuple(_person_events(body))
     return ParsedPerson(pointer, name, _one(values, "_UID"), _one(values, "SEX"), _one(values, "FAMC"), tuple(values.get("FAMS", [])), events)
+
+
+def _person_events(body):
+    for index, (level, tag, _value, _line) in enumerate(body):
+        if level != 1 or tag not in PERSON_EVENT_TAGS:
+            continue
+        date_text = None
+        for nested_level, nested_tag, nested_value, _nested_line in body[index + 1:]:
+            if nested_level <= 1:
+                break
+            if nested_tag == "DATE":
+                date_text = nested_value
+                break
+        yield tag, parse_date(date_text) if date_text else None
 
 
 def _family(pointer, body):
