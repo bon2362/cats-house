@@ -1,3 +1,13 @@
+from app.auth.service import totp_code, verify_totp
+
+
+def test_totp_accepts_current_code_and_rejects_wrong_code():
+    secret = "JBSWY3DPEHPK3PXP"
+
+    assert verify_totp(totp_code(secret, timestamp=1_700_000_000), secret, timestamp=1_700_000_000)
+    assert not verify_totp("000000", secret, timestamp=1_700_000_000)
+
+
 def test_admin_route_rejects_anonymous_client(client):
     response = client.get("/api/v1/admin/session")
 

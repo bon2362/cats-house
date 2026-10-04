@@ -18,6 +18,7 @@ class Settings(BaseSettings):
     s3_bucket: str
     owner_email: str
     owner_password_hash: SecretStr
+    owner_totp_secret: SecretStr | None = None
     session_secret: SecretStr
     environment: Literal["development", "production"]
 

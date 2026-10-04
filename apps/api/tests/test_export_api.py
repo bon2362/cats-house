@@ -19,6 +19,7 @@ def test_owner_downloads_gedcom_without_archived_people(client, database_session
     database_session.flush()
     database_session.add_all((
         Person(import_run_id=run.id, display_name="Анна Иванова", source_uid=str(uuid4())),
+        Person(import_run_id=run.id, display_name="", source_uid=str(uuid4())),
         Person(import_run_id=run.id, display_name="Скрытая Иванова", source_uid=str(uuid4()), is_archived=True),
     ))
     database_session.commit()
@@ -30,3 +31,4 @@ def test_owner_downloads_gedcom_without_archived_people(client, database_session
     assert response.headers["content-type"].startswith("application/x-gedcom")
     assert "Анна /Иванова/" in response.text
     assert "Скрытая" not in response.text
+    assert "0 @I1@ INDI" in response.text
