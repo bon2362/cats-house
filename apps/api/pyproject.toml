@@ -26,6 +26,9 @@ dev = [
   "testcontainers[community]>=4.15,<5",
 ]
 
+[tool.setuptools.packages.find]
+include = ["app*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

@@ -1,3 +1,5 @@
+import os
+
 from alembic import context
 from sqlalchemy import engine_from_config, pool
 
@@ -5,6 +7,8 @@ from app.models import Base
 import app.models.genealogy  # noqa: F401
 
 config = context.config
+if database_url := os.getenv("CATS_HOUSE_DATABASE_URL"):
+    config.set_main_option("sqlalchemy.url", database_url)
 target_metadata = Base.metadata
 
 
