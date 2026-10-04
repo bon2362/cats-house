@@ -3,10 +3,12 @@ import { LitElement, css, html } from 'lit'
 import { ru } from './locales/ru'
 import './pages/home-page'
 import './pages/person-card'
+import './pages/tree-page'
 
 type ConnectionState = 'loading' | 'ready' | 'unavailable'
 type SearchPerson = { id: string; display_name: string }
 type PublicPerson = {
+  id: string
   display_name: string
   biography: string | null
   events: { event_type: string; date_text: string | null }[]
@@ -161,6 +163,8 @@ export class CatsHouseApp extends LitElement {
   }
 
   render() {
+    const treeRootId = new URLSearchParams(window.location.search).get('person')
+    const isTreePage = window.location.pathname === '/tree'
     return html`
       <header>
         <a class="brand" href="/">${ru.brand}</a>
@@ -174,7 +178,9 @@ export class CatsHouseApp extends LitElement {
           ${this.people.map((person) => html`<a href="/people/${person.id}">${person.display_name}</a>`)}
         </section>
       </header>
-      ${this.person
+      ${isTreePage
+        ? html`<cats-tree-page .rootId=${treeRootId}></cats-tree-page>`
+        : this.person
         ? html`<cats-person-card .person=${this.person}></cats-person-card>`
         : html`<cats-house-home .connectionState=${this.connectionState}></cats-house-home>`}
     `

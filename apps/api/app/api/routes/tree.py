@@ -17,8 +17,14 @@ class TreePersonResponse(BaseModel):
     display_name: str
 
 
+class TreeLinkResponse(BaseModel):
+    parent_id: UUID
+    child_id: UUID
+
+
 class TreeResponse(BaseModel):
     people: list[TreePersonResponse]
+    links: list[TreeLinkResponse]
 
 
 @router.get("/tree/{person_id}", response_model=TreeResponse)
@@ -49,4 +55,12 @@ def get_tree(
                 seen.add(related.id)
                 people.append(related)
                 queue.append((related.id, level + 1))
-    return TreeResponse(people=[TreePersonResponse(id=person.id, display_name=person.display_name) for person in people])
+    links = session.scalars(
+        select(ParentChild)
+        .where(ParentChild.parent_id.in_(seen), ParentChild.child_id.in_(seen))
+        .order_by(ParentChild.parent_id, ParentChild.child_id)
+    ).all()
+    return TreeResponse(
+        people=[TreePersonResponse(id=person.id, display_name=person.display_name) for person in people],
+        links=[TreeLinkResponse(parent_id=link.parent_id, child_id=link.child_id) for link in links],
+    )

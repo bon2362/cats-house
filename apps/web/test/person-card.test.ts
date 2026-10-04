@@ -5,6 +5,7 @@ import '../src/pages/person-card'
 it('renders a person, their events, and family links', async () => {
   const element = document.createElement('cats-person-card') as HTMLElement & { person: unknown }
   element.person = {
+    id: 'anna-id',
     display_name: 'Анна Иванова',
     biography: 'Семейная заметка',
     events: [{ event_type: 'BIRT', date_text: '1900' }],
@@ -20,5 +21,6 @@ it('renders a person, their events, and family links', async () => {
   expect(element.shadowRoot?.textContent).toContain('1900')
   expect(element.shadowRoot?.textContent).toContain('Иван Иванов')
   expect(element.shadowRoot?.querySelector('a[href="/people/parent-id"]')).not.toBeNull()
+  expect(element.shadowRoot?.querySelector('a[href="/tree?person=anna-id"]')).not.toBeNull()
   expect(element.shadowRoot?.querySelector('a[href="https://media.example.test/family-photo.jpg"]')).not.toBeNull()
 })

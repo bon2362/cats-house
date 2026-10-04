@@ -4,6 +4,7 @@ type PublicEvent = { event_type: string; date_text: string | null }
 type PublicRelation = { id: string; display_name: string }
 type PublicMedia = { id: string; original_filename: string; url: string }
 type PublicPerson = {
+  id: string
   display_name: string
   biography: string | null
   events: PublicEvent[]
@@ -29,6 +30,7 @@ export class CatsPersonCard extends LitElement {
     return html`
       <article>
         <h1>${this.person.display_name}</h1>
+        <p><a href="/tree?person=${this.person.id}">Открыть дерево</a></p>
         ${this.person.biography ? html`<p>${this.person.biography}</p>` : ''}
         <h2>События</h2>
         <ul>${this.person.events.map((event) => html`<li>${event.event_type} ${event.date_text ?? ''}</li>`)}</ul>

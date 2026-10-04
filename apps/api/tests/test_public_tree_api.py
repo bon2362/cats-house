@@ -34,6 +34,7 @@ def test_descendant_tree_respects_depth(client, database_session):
 
     assert response.status_code == 200
     assert {person["display_name"] for person in response.json()["people"]} == {"Анна", "Борис"}
+    assert response.json()["links"] == [{"parent_id": str(root.id), "child_id": str(child.id)}]
 
 
 def test_ancestor_and_mixed_tree_include_parents(client, database_session):
@@ -51,3 +52,7 @@ def test_ancestor_and_mixed_tree_include_parents(client, database_session):
 
     assert {person["display_name"] for person in ancestors.json()["people"]} == {"Анна", "Борис"}
     assert {person["display_name"] for person in mixed.json()["people"]} == {"Анна", "Борис", "Вера"}
+    assert {(link["parent_id"], link["child_id"]) for link in mixed.json()["links"]} == {
+        (str(parent.id), str(root.id)),
+        (str(root.id), str(child.id)),
+    }
