@@ -3,15 +3,22 @@ import asyncio
 import pytest
 from argon2 import PasswordHasher
 from httpx import ASGITransport, AsyncClient
+from testcontainers.community.postgres import PostgresContainer
 
 from app.core.config import Settings
 
 
+@pytest.fixture(scope="session")
+def postgres_url():
+    with PostgresContainer("postgres:16-alpine", driver="psycopg") as postgres:
+        yield postgres.get_connection_url()
+
+
 @pytest.fixture
-def settings(monkeypatch):
+def settings(monkeypatch, postgres_url):
     monkeypatch.setenv(
         "CATS_HOUSE_DATABASE_URL",
-        "postgresql+psycopg://cats_house:password@localhost:5432/cats_house",
+        postgres_url,
     )
     monkeypatch.setenv("CATS_HOUSE_S3_ENDPOINT", "http://localhost:9000")
     monkeypatch.setenv("CATS_HOUSE_S3_BUCKET", "cats-house-media")
@@ -34,11 +41,17 @@ def client(settings):
 
     app = create_app(settings)
 
+    from sqlalchemy import create_engine
+    from app.models.genealogy import Base
+
+    engine = create_engine(settings.database_url)
+    Base.metadata.create_all(engine)
+
     class ApiClient:
         def __init__(self):
             self.cookies = None
 
-        def request(self, method, path, json=None):
+        def request(self, method, path, json=None, files=None):
             async def send_request():
                 transport = ASGITransport(app=app)
                 async with AsyncClient(
@@ -46,7 +59,7 @@ def client(settings):
                     base_url="https://testserver",
                     cookies=self.cookies,
                 ) as http_client:
-                    response = await http_client.request(method, path, json=json)
+                    response = await http_client.request(method, path, json=json, files=files)
                     self.cookies = http_client.cookies
                     return response
 
@@ -55,7 +68,8 @@ def client(settings):
         def get(self, path):
             return self.request("GET", path)
 
-        def post(self, path, json=None):
-            return self.request("POST", path, json=json)
+        def post(self, path, json=None, files=None):
+            return self.request("POST", path, json=json, files=files)
 
-    return ApiClient()
+    yield ApiClient()
+    Base.metadata.drop_all(engine)

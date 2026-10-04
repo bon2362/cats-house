@@ -8,10 +8,14 @@ version = "0.1.0"
 description = "Собственный API проекта Cat's House"
 requires-python = ">=3.12"
 dependencies = [
+  "alembic>=1.14,<2",
   "argon2-cffi>=23.1,<26",
   "fastapi>=0.115,<1",
   "itsdangerous>=2.2,<3",
   "pydantic-settings>=2.6,<3",
+  "python-multipart>=0.0.20,<1",
+  "psycopg[binary]>=3.2,<4",
+  "SQLAlchemy>=2.0,<3",
   "uvicorn[standard]>=0.34,<1",
 ]
 
@@ -19,7 +23,11 @@ dependencies = [
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8.3,<9",
+  "testcontainers[community]>=4.15,<5",
 ]
+
+[tool.setuptools.packages.find]
+include = ["app*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
