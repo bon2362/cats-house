@@ -3,8 +3,15 @@ import asyncio
 import pytest
 from argon2 import PasswordHasher
 from httpx import ASGITransport, AsyncClient
+from testcontainers.community.postgres import PostgresContainer
 
 from app.core.config import Settings
+
+
+@pytest.fixture(scope="session")
+def postgres_url():
+    with PostgresContainer("postgres:16-alpine", driver="psycopg") as postgres:
+        yield postgres.get_connection_url()
 
 
 @pytest.fixture

@@ -1,0 +1,97 @@
+from datetime import datetime
+from uuid import UUID, uuid4
+
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgreSQLUUID
+from sqlalchemy.orm import Mapped, mapped_column
+
+from app.db.base import Base
+
+
+class ImportRun(Base):
+    __tablename__ = "import_runs"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    original_filename: Mapped[str] = mapped_column(String(255))
+    sha256: Mapped[str] = mapped_column(String(64))
+    state: Mapped[str] = mapped_column(String(16))
+    normalized_payload: Mapped[dict] = mapped_column(JSONB)
+    counts: Mapped[dict] = mapped_column(JSONB)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+
+
+class Person(Base):
+    __tablename__ = "people"
+    __table_args__ = (UniqueConstraint("import_run_id", "source_uid", name="uq_people_import_source_uid"),)
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    import_run_id: Mapped[UUID] = mapped_column(ForeignKey("import_runs.id"))
+    display_name: Mapped[str] = mapped_column(String(512))
+    source_uid: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    sex: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    biography: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class Union(Base):
+    __tablename__ = "unions"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    import_run_id: Mapped[UUID] = mapped_column(ForeignKey("import_runs.id"))
+    partner_one_id: Mapped[UUID | None] = mapped_column(ForeignKey("people.id"), nullable=True)
+    partner_two_id: Mapped[UUID | None] = mapped_column(ForeignKey("people.id"), nullable=True)
+    union_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
+
+class ParentChild(Base):
+    __tablename__ = "parent_children"
+    __table_args__ = (UniqueConstraint("parent_id", "child_id", "relationship_type", name="uq_parent_child_type"),)
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    parent_id: Mapped[UUID] = mapped_column(ForeignKey("people.id"))
+    child_id: Mapped[UUID] = mapped_column(ForeignKey("people.id"))
+    relationship_type: Mapped[str] = mapped_column(String(32), default="biological")
+
+
+class Event(Base):
+    __tablename__ = "events"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    person_id: Mapped[UUID | None] = mapped_column(ForeignKey("people.id"), nullable=True)
+    union_id: Mapped[UUID | None] = mapped_column(ForeignKey("unions.id"), nullable=True)
+    event_type: Mapped[str] = mapped_column(String(64))
+    date_text: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    date_qualifier: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    date_lower: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    date_upper: Mapped[datetime | None] = mapped_column(Date, nullable=True)
+    place: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+
+
+class Note(Base):
+    __tablename__ = "notes"
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    body: Mapped[str] = mapped_column(Text)
+
+
+class Source(Base):
+    __tablename__ = "sources"
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    title: Mapped[str] = mapped_column(String(512))
+
+
+class Media(Base):
+    __tablename__ = "media"
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    storage_key: Mapped[str] = mapped_column(String(1024))
+    media_type: Mapped[str] = mapped_column(String(32))
+
+
+class ImportIssue(Base):
+    __tablename__ = "import_issues"
+
+    id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
+    import_run_id: Mapped[UUID] = mapped_column(ForeignKey("import_runs.id"))
+    severity: Mapped[str] = mapped_column(String(16))
+    message: Mapped[str] = mapped_column(Text)
+    line_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    tag: Mapped[str | None] = mapped_column(String(32), nullable=True)
