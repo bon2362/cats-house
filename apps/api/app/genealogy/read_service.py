@@ -1,6 +1,6 @@
 from uuid import UUID
 
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
 from app.models.genealogy import Event, Media, MediaLink, ParentChild, Person, Union
@@ -19,7 +19,11 @@ def search_people(session: Session, query: str) -> list[Person]:
 def featured_person(session: Session) -> Person | None:
     return session.scalar(
         select(Person)
-        .where(Person.is_archived.is_(False), Person.display_name != "")
+        .where(
+            Person.is_archived.is_(False),
+            func.trim(Person.display_name) != "",
+            Person.display_name.not_like("%?%"),
+        )
         .order_by(Person.display_name)
         .limit(1)
     )

@@ -56,6 +56,7 @@ def test_featured_person_returns_the_first_active_person_without_login(client, d
     visible = add_person(database_session, "Борис Видимый")
     add_person(database_session, "Владимир Поздний")
     add_person(database_session, "")
+    add_person(database_session, "??? ??? ???")
 
     response = client.get("/api/v1/people/featured")
 
