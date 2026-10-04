@@ -50,6 +50,24 @@ docker compose up
 
 Веб-интерфейс будет доступен по адресу `http://localhost:5173`, а API — по адресу `http://localhost:8000/api/v1/health`. Порты опубликованы только на `localhost`.
 
+## Локальный импорт GEDCOM
+
+Импорт доступен только после входа владельца и состоит из предпросмотра и отдельного применения. Замените `ВАШ_ПАРОЛЬ`, путь и идентификатор предпросмотра своими значениями; ни один из них не записывайте в Git.
+
+```sh
+curl -c /tmp/cats-house-cookie -X POST http://localhost:8000/api/v1/auth/login \
+  -H 'content-type: application/json' \
+  --data '{"password":"ВАШ_ПАРОЛЬ"}'
+
+curl -b /tmp/cats-house-cookie -F 'file=@/абсолютный/путь/к/файлу.ged' \
+  http://localhost:8000/api/v1/admin/imports/preview
+
+curl -b /tmp/cats-house-cookie -X POST \
+  http://localhost:8000/api/v1/admin/imports/ИДЕНТИФИКАТОР_ПРЕДПРОСМОТРА/apply
+```
+
+Сначала проверьте отчёт предпросмотра. Применение создаёт набор данных целиком либо не создаёт ничего при ошибке.
+
 Для полной локальной проверки без удаления данных Docker:
 
 ```sh
