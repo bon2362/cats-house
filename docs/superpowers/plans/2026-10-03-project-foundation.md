@@ -4,9 +4,9 @@
 
 **Goal:** Create a reproducible AGPL-licensed monorepo for Cat's House with a Russian web shell, an independent API, PostgreSQL, and S3-compatible media storage.
 
-**Architecture:** The project is a Docker Compose monorepo with `apps/web` for the Lit public and owner interface, `apps/api` for the FastAPI service, PostgreSQL for application records, and MinIO for development media storage. The web application accesses only the Cat's House API; no Gramps process or database is part of the runtime.
+**Architecture:** The project is a Docker Compose monorepo with `apps/web` for the Lit public and owner interface, `apps/api` for the FastAPI service, PostgreSQL for application records, and LocalStack with S3 for development media storage. The web application accesses only the Cat's House API; no Gramps process or database is part of the runtime.
 
-**Tech Stack:** TypeScript, Lit, Vite, Python, FastAPI, SQLAlchemy, Alembic, PostgreSQL 16, MinIO, Docker Compose, Vitest, pytest.
+**Tech Stack:** TypeScript, Lit, Vite, Python, FastAPI, SQLAlchemy, Alembic, PostgreSQL 16, LocalStack S3, Docker Compose, Vitest, pytest.
 
 **Spec:** `docs/specs/family-tree-open-source-product-design.md`
 
@@ -24,7 +24,7 @@
 - A browser started without an owner session must never receive an administrative route, cookie, token, or storage credential; Task 4 adds an API authorization test.
 - Cyrillic names, labels, and error messages must remain UTF-8 through the API and browser; Task 3 adds a Russian API response test and Task 5 adds a rendered Russian UI test.
 - A missing or malformed required environment variable must stop the API rather than silently use an unsafe default; Task 2 adds configuration validation tests.
-- Starting the full development stack twice must not destroy PostgreSQL or MinIO volumes; Task 2 verifies named persistent volumes.
+- Starting the full development stack twice must not destroy PostgreSQL or local S3-emulator volumes; Task 2 verifies named persistent volumes.
 - A copied Gramps file without a corresponding `NOTICE` entry must fail the repository compliance check; Task 1 adds the check before any copied component is accepted.
 
 ---
@@ -36,7 +36,7 @@
 | `LICENSE` | Complete AGPL-3.0 license text. |
 | `NOTICE` | Attribution and license mapping for Gramps-derived code. |
 | `README.md` | Russian project overview and local startup instructions. |
-| `docker-compose.yml` | Development services: web, API, PostgreSQL, MinIO. |
+| `docker-compose.yml` | Development services: web, API, PostgreSQL, LocalStack S3. |
 | `.env.example` | Safe, documented local configuration names without real secrets. |
 | `apps/api/pyproject.toml` | Python dependencies and test configuration. |
 | `apps/api/app/main.py` | FastAPI application factory and route registration. |
@@ -130,7 +130,7 @@ Expected: FAIL because the API package and `Settings` do not exist.
 
 - [ ] **Step 3: Implement `Settings` and the Compose services**
 
-Use a strict Pydantic settings model. Compose must start PostgreSQL 16 and MinIO with named volumes, and pass only variables declared in `.env.example` to the API.
+Use a strict Pydantic settings model. Compose must start PostgreSQL 16 and LocalStack S3 with named volumes, and pass only variables declared in `.env.example` to the API.
 
 - [ ] **Step 4: Run configuration and Compose validation**
 

@@ -1,0 +1,63 @@
+services:
+  web:
+    image: node:24-alpine
+    working_dir: /workspace
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
+    volumes:
+      - ./apps/web:/workspace
+      - /workspace/node_modules
+    environment:
+      CATS_HOUSE_API_PROXY_TARGET: http://api:8000
+    ports:
+      - "127.0.0.1:5173:5173"
+    depends_on:
+      - api
+
+  api:
+    image: python:3.14-slim
+    working_dir: /workspace
+    command: sh -c "pip install --no-cache-dir -e . && uvicorn app.main:app --host 0.0.0.0 --port 8000"
+    volumes:
+      - ./apps/api:/workspace
+    environment:
+      CATS_HOUSE_DATABASE_URL: ${CATS_HOUSE_DATABASE_URL:-postgresql+psycopg://cats_house:local-development-password@postgres:5432/cats_house}
+      CATS_HOUSE_S3_ENDPOINT: ${CATS_HOUSE_S3_ENDPOINT:-http://minio:4566}
+      CATS_HOUSE_S3_BUCKET: ${CATS_HOUSE_S3_BUCKET:-cats-house-media}
+      CATS_HOUSE_OWNER_EMAIL: ${CATS_HOUSE_OWNER_EMAIL:-owner@example.test}
+      CATS_HOUSE_OWNER_PASSWORD_HASH: ${CATS_HOUSE_OWNER_PASSWORD_HASH:?Set CATS_HOUSE_OWNER_PASSWORD_HASH in .env}
+      CATS_HOUSE_SESSION_SECRET: ${CATS_HOUSE_SESSION_SECRET:?Set CATS_HOUSE_SESSION_SECRET in .env}
+      CATS_HOUSE_ENVIRONMENT: ${CATS_HOUSE_ENVIRONMENT:?Set CATS_HOUSE_ENVIRONMENT in .env}
+    ports:
+      - "127.0.0.1:8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_started
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-cats_house}
+      POSTGRES_USER: ${POSTGRES_USER:-cats_house}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-local-development-password}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  minio:
+    image: localstack/localstack:2026.08.2
+    environment:
+      SERVICES: s3
+    ports:
+      - "127.0.0.1:4566:4566"
+    volumes:
+      - minio_data:/var/lib/localstack
+
+volumes:
+  postgres_data:
+  minio_data:

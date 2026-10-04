@@ -1,2 +1,14 @@
 # macOS Finder metadata
 .DS_Store
+
+# Isolated local Git worktrees
+.worktrees/
+
+# Local configuration and generated dependencies
+.env
+.venv/
+__pycache__/
+.pytest_cache/
+*.egg-info/
+node_modules/
+dist/
