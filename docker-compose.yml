@@ -18,7 +18,7 @@ services:
       - ./apps/api:/workspace
     environment:
       CATS_HOUSE_DATABASE_URL: ${CATS_HOUSE_DATABASE_URL:-postgresql+psycopg://cats_house:local-development-password@postgres:5432/cats_house}
-      CATS_HOUSE_S3_ENDPOINT: ${CATS_HOUSE_S3_ENDPOINT:-http://minio:9000}
+      CATS_HOUSE_S3_ENDPOINT: ${CATS_HOUSE_S3_ENDPOINT:-http://minio:4566}
       CATS_HOUSE_S3_BUCKET: ${CATS_HOUSE_S3_BUCKET:-cats-house-media}
       CATS_HOUSE_OWNER_EMAIL: ${CATS_HOUSE_OWNER_EMAIL:-owner@example.test}
       CATS_HOUSE_OWNER_PASSWORD_HASH: ${CATS_HOUSE_OWNER_PASSWORD_HASH:?Set CATS_HOUSE_OWNER_PASSWORD_HASH in .env}
@@ -46,16 +46,13 @@ services:
       - postgres_data:/var/lib/postgresql/data
 
   minio:
-    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
-    command: server /data --console-address ":9001"
+    image: localstack/localstack:2026.08.2
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER:-cats-house}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD:-local-development-minio-password}
+      SERVICES: s3
     ports:
-      - "9000:9000"
-      - "9001:9001"
+      - "4566:4566"
     volumes:
-      - minio_data:/data
+      - minio_data:/var/lib/localstack
 
 volumes:
   postgres_data:
