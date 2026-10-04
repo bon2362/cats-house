@@ -3,7 +3,7 @@ from uuid import UUID, uuid4
 
 from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgreSQLUUID
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -18,6 +18,11 @@ class ImportRun(Base):
     normalized_payload: Mapped[dict] = mapped_column(JSONB)
     counts: Mapped[dict] = mapped_column(JSONB)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    issues: Mapped[list["ImportIssue"]] = relationship(cascade="all, delete-orphan", back_populates="import_run")
+
+    @property
+    def has_errors(self) -> bool:
+        return any(issue.severity == "error" for issue in self.issues)
 
 
 class Person(Base):
@@ -95,3 +100,4 @@ class ImportIssue(Base):
     message: Mapped[str] = mapped_column(Text)
     line_number: Mapped[int | None] = mapped_column(Integer, nullable=True)
     tag: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    import_run: Mapped[ImportRun] = relationship(back_populates="issues")
