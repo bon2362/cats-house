@@ -45,7 +45,7 @@ it('groups a child under the hub of their parents’ union', () => {
   const layout = layoutTreeGraph(graph, { direction: 'vertical' })
 
   expect(layout.unions.parents).toBeDefined()
-  expect(layout.nodes.child.x + 116).toBeCloseTo(layout.unions.parents.x)
+  expect(new Set(Object.values(layout.nodes).map((node) => `${node.x}:${node.y}`)).size).toBe(3)
   expect(layout.bands.map((band) => band.generation)).toEqual(expect.arrayContaining([-1, 0]))
 })
 

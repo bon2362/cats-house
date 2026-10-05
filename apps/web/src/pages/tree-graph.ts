@@ -56,13 +56,9 @@ export function layoutTreeGraph(data: TreeGraphData, options: LayoutOptions): Gr
     }
   }
 
-  for (const union of data.unions) {
-    const hub = unions[union.id]
-    if (!hub) continue
-    const children = unique(data.parent_links.filter((link) => link.union_id === union.id).map((link) => link.child_id)).filter((id) => nodes[id])
-    const firstX = hub.x - (children.length * CARD_WIDTH + Math.max(0, children.length - 1) * COLUMN_GAP) / 2
-    children.forEach((childId, index) => { nodes[childId].x = firstX + index * (CARD_WIDTH + COLUMN_GAP) })
-  }
+  // Keep the first, non-overlapping row placement. A person may be a child in
+  // one family and a partner in another; moving them again here caused cards
+  // from different family groups to occupy the same coordinates.
 
   const maxX = Math.max(PADDING * 2, ...Object.values(nodes).map((node) => node.x + CARD_WIDTH + PADDING))
   const maxY = Math.max(PADDING * 2, ...Object.values(nodes).map((node) => node.y + CARD_HEIGHT + PADDING))
@@ -94,7 +90,7 @@ export class CatsTreeGraph extends LitElement {
   render() {
     if (!this.graph?.people.length) return html`<p>У этого человека в архиве нет родственников.</p>`
     const layout = layoutTreeGraph(this.graph, { direction: this.direction })
-    return html`<svg viewBox="0 0 ${layout.width} ${layout.height}" role="group" aria-label="Семейное дерево">
+    return html`<svg width="${layout.width}" height="${layout.height}" viewBox="0 0 ${layout.width} ${layout.height}" role="group" aria-label="Семейное дерево">
       ${this.showBands ? layout.bands.map((band) => svg`<g><rect class="band" x="${band.x}" y="${band.y}" width="${band.width}" height="${band.height}"></rect><text class="band-label" x="18" y="${band.y + 24}">${band.label}</text></g>`) : ''}
       ${this.renderFamilies(layout)}${this.renderOrphanLinks(layout)}${this.graph.people.map((person) => this.renderPerson(person, layout.nodes[person.id]))}
     </svg>`
