@@ -322,3 +322,27 @@ it('routes a third union around intervening partner cards', () => {
   expect(layout.unions.third.y).toBeLessThan(layout.nodes.anna.y)
   expect(third?.d).toContain(`V ${layout.unions.third.y}`)
 })
+
+it('routes a third union around intervening partner cards horizontally', () => {
+  const graph: TreeGraphData = {
+    ...familyGraph,
+    people: [
+      { ...familyGraph.people[0], id: 'anna', display_name: 'Анна', is_root: true },
+      { ...familyGraph.people[1], id: 'boris', display_name: 'Борис', is_root: false },
+      { ...familyGraph.people[2], id: 'clara', display_name: 'Вера', is_root: false },
+      { ...familyGraph.people[2], id: 'daria', display_name: 'Галина', is_root: false },
+    ],
+    unions: [
+      { id: 'first', partner_one_id: 'anna', partner_two_id: 'boris', union_type: 'marriage' },
+      { id: 'second', partner_one_id: 'anna', partner_two_id: 'clara', union_type: 'marriage' },
+      { id: 'third', partner_one_id: 'anna', partner_two_id: 'daria', union_type: 'marriage' },
+    ],
+    parent_links: [],
+  }
+
+  const layout = layoutTreeGraph(graph, { direction: 'horizontal' })
+  const third = layout.paths.find((path) => path.kind === 'partner' && path.from === 'anna' && path.to === 'daria')
+
+  expect(layout.unions.third.x).toBeLessThan(layout.nodes.anna.x)
+  expect(third?.d).toContain(`H ${layout.unions.third.x}`)
+})
