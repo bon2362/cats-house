@@ -239,3 +239,33 @@ it('anchors every vertical connector at the measured edge of its own card', () =
   expect(path?.d).toContain(`M ${layout.nodes.parent.x + layout.nodes.parent.width / 2} ${layout.nodes.parent.y + layout.nodes.parent.height}`)
   expect(path?.d).toContain(`V ${layout.nodes.child.y}`)
 })
+
+it('keeps measured card dimensions in horizontal orientation', () => {
+  const vertical = layoutTreeGraph(familyGraph, { direction: 'vertical' })
+  const horizontal = layoutTreeGraph(familyGraph, { direction: 'horizontal' })
+
+  expect(horizontal.nodes.parent.width).toBe(vertical.nodes.parent.width)
+  expect(horizontal.nodes.parent.height).toBe(vertical.nodes.parent.height)
+  expect(horizontal.nodes.child.x).toBeGreaterThan(horizontal.nodes.parent.x)
+})
+
+it('places partners next to one another so their line cannot cross another card', () => {
+  const graph: TreeGraphData = {
+    ...familyGraph,
+    people: [
+      { ...familyGraph.people[0], id: 'anna', display_name: 'Анна', is_root: true },
+      { ...familyGraph.people[1], id: 'boris', display_name: 'Борис', is_root: false },
+      { ...familyGraph.people[2], id: 'clara', display_name: 'Клара', is_root: false },
+    ],
+    unions: [{ id: 'couple', partner_one_id: 'anna', partner_two_id: 'clara', union_type: 'marriage' }],
+    parent_links: [],
+  }
+
+  const layout = layoutTreeGraph(graph, { direction: 'vertical' })
+  const partnerPath = layout.paths.find((path) => path.kind === 'partner')
+  const left = Math.min(layout.nodes.anna.x, layout.nodes.clara.x)
+  const right = Math.max(layout.nodes.anna.x, layout.nodes.clara.x)
+
+  expect(partnerPath).toBeDefined()
+  expect(layout.nodes.boris.x < left || layout.nodes.boris.x > right).toBe(true)
+})
