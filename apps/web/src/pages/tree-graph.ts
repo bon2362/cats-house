@@ -78,13 +78,13 @@ export function layoutTreeGraph(data: TreeGraphData, options: LayoutOptions): Gr
   const maxX = Math.max(HORIZONTAL_PADDING * 2, ...Object.values(nodes).map((node) => node.x + node.width + HORIZONTAL_PADDING))
   const maxY = Math.max(VERTICAL_PADDING * 2, ...Object.values(nodes).map((node) => node.y + node.height + VERTICAL_PADDING))
   const bands = orderedGenerations.map((generation, index) => ({ generation, label: generationLabel(generation), x: 0, y: VERTICAL_PADDING + (generation - minGeneration) * (CARD_HEIGHT + ROW_GAP) - ROW_GAP / 2, width: maxX, height: CARD_HEIGHT + ROW_GAP, alternate: index % 2 === 1 }))
-  const paths: GraphPath[] = data.unions.flatMap((union) => {
+  const paths: GraphPath[] = [...data.unions.flatMap((union): GraphPath[] => {
     const partners = [union.partner_one_id, union.partner_two_id].filter((id): id is string => Boolean(id))
     return partners.length === 2 ? [{ kind: 'partner' as const, from: partners[0], to: partners[1] }] : []
-  }).concat(data.parent_links.map((link) => ({ kind: 'parent-child' as const, from: link.parent_id, to: link.child_id })))
+  }), ...data.parent_links.map((link): GraphPath => ({ kind: 'parent-child', from: link.parent_id, to: link.child_id }))]
   if (options.direction === 'vertical') return { nodes, unions, bands, paths, width: maxX, height: maxY }
   return {
-    nodes: Object.fromEntries(Object.entries(nodes).map(([id, node]) => [id, { x: node.y, y: node.x, generation: node.generation }])),
+    nodes: Object.fromEntries(Object.entries(nodes).map(([id, node]) => [id, { x: node.y, y: node.x, generation: node.generation, width: node.height, height: node.width }])),
     unions: Object.fromEntries(Object.entries(unions).map(([id, node]) => [id, { x: node.y, y: node.x, generation: node.generation }])),
     bands: bands.map((band) => ({ ...band, x: band.y, y: 0, width: band.height, height: maxX })), paths, width: maxY, height: maxX,
   }
