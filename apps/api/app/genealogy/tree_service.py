@@ -40,11 +40,19 @@ class TreeParentLink:
 
 
 @dataclass(frozen=True)
+class TreeRelationPath:
+    person_ids: list[UUID]
+    labels: list[str]
+    common_ancestor_id: UUID | None
+
+
+@dataclass(frozen=True)
 class TreeGraph:
     people: list[TreePerson]
     unions: list[TreeUnion]
     parent_links: list[TreeParentLink]
     partner_links: list[TreeUnion]
+    relation_path: TreeRelationPath | None
 
 
 def build_tree_graph(
@@ -58,22 +66,36 @@ def build_tree_graph(
     if root is None:
         return None
 
-    people_by_id = {root.id: root}
-    queue = deque([(root.id, 0)])
-    while queue:
-        current_id, level = queue.popleft()
-        if level >= depth:
-            continue
-        related_ids: list[UUID] = []
-        if mode in {"descendants", "mixed"}:
-            related_ids.extend(session.scalars(select(ParentChild.child_id).where(ParentChild.parent_id == current_id)).all())
-        if mode in {"ancestors", "mixed"}:
-            related_ids.extend(session.scalars(select(ParentChild.parent_id).where(ParentChild.child_id == current_id)).all())
-        related_people = session.scalars(select(Person).where(Person.id.in_(related_ids))).all()
-        for person in related_people:
-            if person.id not in people_by_id:
-                people_by_id[person.id] = person
-                queue.append((person.id, level + 1))
+    relation_path: TreeRelationPath | None = None
+    if mode == "close":
+        included_ids = _close_relative_ids(session, root.id)
+        people_by_id = {person.id: person for person in session.scalars(select(Person).where(Person.id.in_(included_ids))).all()}
+    elif mode == "path":
+        if related_to is None:
+            raise ValueError("Для режима «Как связаны» выберите второго человека.")
+        target = session.scalar(select(Person).where(Person.id == related_to, Person.is_archived.is_(False)))
+        if target is None:
+            raise ValueError("Второй человек не найден.")
+        relation_path = _shortest_relation_path(session, root.id, target.id)
+        included_ids = set(relation_path.person_ids) if relation_path else {root.id, target.id}
+        people_by_id = {person.id: person for person in session.scalars(select(Person).where(Person.id.in_(included_ids))).all()}
+    else:
+        people_by_id = {root.id: root}
+        queue = deque([(root.id, 0)])
+        while queue:
+            current_id, level = queue.popleft()
+            if level >= depth:
+                continue
+            related_ids: list[UUID] = []
+            if mode in {"descendants", "mixed"}:
+                related_ids.extend(session.scalars(select(ParentChild.child_id).where(ParentChild.parent_id == current_id)).all())
+            if mode in {"ancestors", "mixed"}:
+                related_ids.extend(session.scalars(select(ParentChild.parent_id).where(ParentChild.child_id == current_id)).all())
+            related_people = session.scalars(select(Person).where(Person.id.in_(related_ids))).all()
+            for person in related_people:
+                if person.id not in people_by_id:
+                    people_by_id[person.id] = person
+                    queue.append((person.id, level + 1))
 
     included_ids = set(people_by_id)
     unions = list(
@@ -89,8 +111,9 @@ def build_tree_graph(
         for partner_id in (union.partner_one_id, union.partner_two_id)
         if partner_id is not None
     }
-    for partner in session.scalars(select(Person).where(Person.id.in_(partner_ids))).all():
-        people_by_id.setdefault(partner.id, partner)
+    if mode != "path":
+        for partner in session.scalars(select(Person).where(Person.id.in_(partner_ids))).all():
+            people_by_id.setdefault(partner.id, partner)
     included_ids = set(people_by_id)
 
     parent_links = list(
@@ -136,7 +159,101 @@ def build_tree_graph(
         )
         for link in parent_links
     ]
-    return TreeGraph(people=people, unions=graph_unions, parent_links=graph_links, partner_links=graph_unions)
+    return TreeGraph(
+        people=people,
+        unions=graph_unions,
+        parent_links=graph_links,
+        partner_links=graph_unions,
+        relation_path=relation_path,
+    )
+
+
+def _close_relative_ids(session: Session, root_id: UUID) -> set[UUID]:
+    parent_ids = set(session.scalars(select(ParentChild.parent_id).where(ParentChild.child_id == root_id)).all())
+    child_ids = set(session.scalars(select(ParentChild.child_id).where(ParentChild.parent_id == root_id)).all())
+    sibling_ids = set()
+    if parent_ids:
+        sibling_ids = set(session.scalars(select(ParentChild.child_id).where(ParentChild.parent_id.in_(parent_ids))).all())
+    unions = session.scalars(
+        select(Union).where(or_(Union.partner_one_id == root_id, Union.partner_two_id == root_id))
+    ).all()
+    partner_ids = {
+        partner_id
+        for union in unions
+        for partner_id in (union.partner_one_id, union.partner_two_id)
+        if partner_id is not None and partner_id != root_id
+    }
+    partner_parent_ids = set()
+    if partner_ids:
+        partner_parent_ids = set(session.scalars(select(ParentChild.parent_id).where(ParentChild.child_id.in_(partner_ids))).all())
+    return {root_id, *parent_ids, *child_ids, *sibling_ids, *partner_ids, *partner_parent_ids}
+
+
+def _shortest_relation_path(session: Session, first_id: UUID, second_id: UUID) -> TreeRelationPath | None:
+    adjacency: dict[UUID, list[tuple[UUID, str]]] = {}
+    parent_links = session.scalars(select(ParentChild)).all()
+    for link in parent_links:
+        adjacency.setdefault(link.parent_id, []).append((link.child_id, "ребёнок"))
+        adjacency.setdefault(link.child_id, []).append((link.parent_id, "родитель"))
+    for union in session.scalars(select(Union)).all():
+        if union.partner_one_id is not None and union.partner_two_id is not None:
+            adjacency.setdefault(union.partner_one_id, []).append((union.partner_two_id, "партнёр"))
+            adjacency.setdefault(union.partner_two_id, []).append((union.partner_one_id, "партнёр"))
+
+    queue = deque([first_id])
+    previous: dict[UUID, tuple[UUID, str] | None] = {first_id: None}
+    while queue:
+        current_id = queue.popleft()
+        if current_id == second_id:
+            break
+        for next_id, label in sorted(adjacency.get(current_id, []), key=lambda item: str(item[0])):
+            if next_id not in previous:
+                previous[next_id] = (current_id, label)
+                queue.append(next_id)
+    if second_id not in previous:
+        return None
+
+    person_ids = [second_id]
+    labels: list[str] = []
+    current_id = second_id
+    while previous[current_id] is not None:
+        prior_id, label = previous[current_id]
+        person_ids.append(prior_id)
+        labels.append(label)
+        current_id = prior_id
+    person_ids.reverse()
+    labels.reverse()
+    return TreeRelationPath(
+        person_ids=person_ids,
+        labels=labels,
+        common_ancestor_id=_common_ancestor(session, first_id, second_id),
+    )
+
+
+def _common_ancestor(session: Session, first_id: UUID, second_id: UUID) -> UUID | None:
+    parents_by_child: dict[UUID, list[UUID]] = {}
+    for link in session.scalars(select(ParentChild)).all():
+        parents_by_child.setdefault(link.child_id, []).append(link.parent_id)
+
+    def ancestor_distances(person_id: UUID) -> dict[UUID, int]:
+        distances: dict[UUID, int] = {}
+        queue = deque([(person_id, 0)])
+        seen = {person_id}
+        while queue:
+            current_id, distance = queue.popleft()
+            for parent_id in parents_by_child.get(current_id, []):
+                if parent_id not in seen:
+                    seen.add(parent_id)
+                    distances[parent_id] = distance + 1
+                    queue.append((parent_id, distance + 1))
+        return distances
+
+    first_ancestors = ancestor_distances(first_id)
+    second_ancestors = ancestor_distances(second_id)
+    common = set(first_ancestors) & set(second_ancestors)
+    if not common:
+        return None
+    return min(common, key=lambda item: (max(first_ancestors[item], second_ancestors[item]), str(item)))
 
 
 def _life_labels(session: Session, person_ids: set[UUID]) -> dict[UUID, dict[str, str]]:
