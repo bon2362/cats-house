@@ -49,6 +49,44 @@ it('groups a child under the hub of their parents’ union', () => {
   expect(layout.bands.map((band) => band.generation)).toEqual(expect.arrayContaining([-1, 0]))
 })
 
+it('places a family hub on the partners’ branch, not below their cards', () => {
+  const graph: TreeGraphData = {
+    people: [
+      { id: 'mother', display_name: 'Анна', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
+      { id: 'father', display_name: 'Пётр', sex: 'M', birth_label: null, death_label: null, is_hidden: false, is_root: false },
+      { id: 'child', display_name: 'Мария', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: true },
+    ],
+    unions: [{ id: 'parents', partner_one_id: 'mother', partner_two_id: 'father', union_type: 'marriage' }],
+    partner_links: [],
+    parent_links: [
+      { parent_id: 'mother', child_id: 'child', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'father', child_id: 'child', union_id: 'parents', relationship_type: 'biological' },
+    ],
+    links: [], relation_path: null,
+  }
+
+  const layout = layoutTreeGraph(graph, { direction: 'vertical' })
+
+  expect(layout.unions.parents.y).toBe(layout.nodes.mother.y + layout.nodes.mother.height / 2)
+  expect(layout.paths.find((path) => path.kind === 'parent-child' && path.from === 'parents')?.d).toContain(`M ${layout.unions.parents.x} ${layout.unions.parents.y}`)
+})
+
+it('does not render a dangling hub or downward segment for a union without visible children', async () => {
+  await import('../src/pages/tree-graph')
+  const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData }
+  graph.graph = {
+    ...familyGraph,
+    people: familyGraph.people.slice(0, 2),
+    unions: [{ id: 'pair', partner_one_id: 'parent', partner_two_id: 'child', union_type: 'marriage' }],
+    parent_links: [],
+  }
+  document.body.append(graph)
+  await (graph as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(graph.shadowRoot?.querySelectorAll('circle.hub')).toHaveLength(0)
+  expect(graph.shadowRoot?.querySelector('path.partner')?.getAttribute('d')?.split(' M ')).toHaveLength(1)
+})
+
 it('keeps siblings together beneath their union without overlapping any cards', () => {
   const graph: TreeGraphData = {
     people: [
@@ -101,6 +139,40 @@ it('renders a hidden person as a non-identifying card', async () => {
   expect(graph.shadowRoot?.textContent).toContain('Сведения скрыты')
   expect(graph.shadowRoot?.textContent).not.toContain('Скрытая Анна')
   expect(graph.shadowRoot?.querySelector('svg')).not.toBeNull()
+})
+
+it('uses a person’s known relationship to the centre instead of a generic label', async () => {
+  await import('../src/pages/tree-graph')
+  const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData }
+  graph.graph = {
+    people: [
+      { id: 'father', display_name: 'Пётр', sex: 'M', birth_label: null, death_label: null, is_hidden: false, is_root: false },
+      { id: 'mother', display_name: 'Анна', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
+      { id: 'root', display_name: 'Мария', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: true },
+      { id: 'spouse', display_name: 'Иван', sex: 'M', birth_label: null, death_label: null, is_hidden: false, is_root: false },
+      { id: 'daughter', display_name: 'Вера', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
+    ],
+    unions: [
+      { id: 'parents', partner_one_id: 'father', partner_two_id: 'mother', union_type: 'marriage' },
+      { id: 'couple', partner_one_id: 'root', partner_two_id: 'spouse', union_type: 'marriage' },
+    ],
+    partner_links: [],
+    parent_links: [
+      { parent_id: 'father', child_id: 'root', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'mother', child_id: 'root', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'root', child_id: 'daughter', union_id: 'couple', relationship_type: 'biological' },
+      { parent_id: 'spouse', child_id: 'daughter', union_id: 'couple', relationship_type: 'biological' },
+    ],
+    links: [], relation_path: null,
+  }
+  document.body.append(graph)
+  await (graph as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  const role = (id: string) => graph.shadowRoot?.querySelector(`.card[data-person-id="${id}"] .eyebrow`)?.textContent
+  expect(role('father')).toBe('ОТЕЦ')
+  expect(role('mother')).toBe('МАТЬ')
+  expect(role('spouse')).toBe('МУЖ')
+  expect(role('daughter')).toBe('ДОЧЬ')
 })
 
 it('gives a long full name a wider card instead of truncating it', () => {
