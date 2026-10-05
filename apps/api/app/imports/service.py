@@ -78,10 +78,20 @@ def apply_preview(session: Session, import_id: UUID) -> ImportRun:
             )
             session.add(union)
             unions_by_pointer[raw_family["pointer"]] = union
+        session.flush()
+
+        for raw_family in payload["unions"]:
+            union = unions_by_pointer[raw_family["pointer"]]
             for parent_pointer in (raw_family["husband"], raw_family["wife"]):
                 if parent_pointer:
                     for child_pointer in raw_family["children"]:
-                        session.add(ParentChild(parent_id=_person_id(people_by_pointer, parent_pointer), child_id=_person_id(people_by_pointer, child_pointer)))
+                        session.add(
+                            ParentChild(
+                                parent_id=_person_id(people_by_pointer, parent_pointer),
+                                child_id=_person_id(people_by_pointer, child_pointer),
+                                union_id=union.id,
+                            )
+                        )
         session.flush()
 
         for raw_event in payload["events"]:
