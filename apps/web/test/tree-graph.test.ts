@@ -111,6 +111,13 @@ it('gives a long full name a wider card instead of truncating it', () => {
   expect(long.lines.join(' ')).toContain('Переяславцева')
 })
 
+it('allocates enough height for every name line and the date', () => {
+  const metrics = cardMetrics({ ...familyGraph.people[0], display_name: 'Александра Константиновна Переяславцева' })
+
+  expect(metrics.lines).toHaveLength(2)
+  expect(metrics.height).toBeGreaterThanOrEqual(100)
+})
+
 it('returns semantic paths and non-overlapping measured cards', () => {
   const graph: TreeGraphData = {
     ...familyGraph,
