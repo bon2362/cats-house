@@ -49,6 +49,48 @@ it('groups a child under the hub of their parents’ union', () => {
   expect(layout.bands.map((band) => band.generation)).toEqual(expect.arrayContaining([-1, 0]))
 })
 
+it('keeps siblings together beneath their union without overlapping any cards', () => {
+  const graph: TreeGraphData = {
+    people: [
+      { id: 'grandmother', display_name: 'Анна', sex: 'F', birth_label: '1900', death_label: null, is_hidden: false, is_root: false },
+      { id: 'grandfather', display_name: 'Пётр', sex: 'M', birth_label: '1898', death_label: null, is_hidden: false, is_root: false },
+      { id: 'first', display_name: 'Вера', sex: 'F', birth_label: '1925', death_label: null, is_hidden: false, is_root: false },
+      { id: 'root', display_name: 'Борис', sex: 'M', birth_label: '1930', death_label: null, is_hidden: false, is_root: true },
+      { id: 'second', display_name: 'Галина', sex: 'F', birth_label: '1935', death_label: null, is_hidden: false, is_root: false },
+      { id: 'spouse', display_name: 'Дмитрий', sex: 'M', birth_label: '1928', death_label: null, is_hidden: false, is_root: false },
+      { id: 'grandchild', display_name: 'Елена', sex: 'F', birth_label: '1954', death_label: null, is_hidden: false, is_root: false },
+    ],
+    unions: [
+      { id: 'parents', partner_one_id: 'grandmother', partner_two_id: 'grandfather', union_type: 'marriage' },
+      { id: 'root-union', partner_one_id: 'root', partner_two_id: 'spouse', union_type: 'marriage' },
+    ],
+    partner_links: [],
+    parent_links: [
+      { parent_id: 'grandmother', child_id: 'first', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'grandfather', child_id: 'first', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'grandmother', child_id: 'root', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'grandfather', child_id: 'root', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'grandmother', child_id: 'second', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'grandfather', child_id: 'second', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'root', child_id: 'grandchild', union_id: 'root-union', relationship_type: 'biological' },
+      { parent_id: 'spouse', child_id: 'grandchild', union_id: 'root-union', relationship_type: 'biological' },
+    ],
+    links: [], relation_path: null,
+  }
+
+  const layout = layoutTreeGraph(graph, { direction: 'vertical' })
+  const allNodes = Object.values(layout.nodes)
+
+  // A spouse may be rendered beside a child, but siblings remain on one
+  // generation and the family union remains a real hub for that branch.
+  expect(layout.nodes.first.y).toBe(layout.nodes.root.y)
+  expect(layout.nodes.root.y).toBe(layout.nodes.second.y)
+  expect(layout.nodes.root.y).toBe(layout.nodes.spouse.y)
+  expect(layout.unions.parents).toBeDefined()
+  expect(layout.unions['root-union']).toBeDefined()
+  expect(new Set(allNodes.map((node) => `${node.x}:${node.y}`)).size).toBe(allNodes.length)
+})
+
 it('renders a hidden person as a non-identifying card', async () => {
   await import('../src/pages/tree-graph')
   const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData }
