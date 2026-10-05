@@ -15,7 +15,7 @@ export type GraphLayout = { nodes:Record<string,NodePosition>;unions:Record<stri
 const COLUMN_GAP=28, FAMILY_GAP=52, ROW_GAP=132, HORIZONTAL_PADDING=240, VERTICAL_PADDING=72
 const label=(p:TreePersonData)=>p.is_hidden?'Сведения скрыты':p.display_name||'Имя не указано'
 const unique=(xs:string[])=>[...new Set(xs)]
-export function cardMetrics(person:TreePersonData):CardMetrics { const lines:string[]=[]; let line=''; for(const word of label(person).split(/\s+/)){const next=line?`${line} ${word}`:word;if(next.length>34&&line){lines.push(line);line=word}else line=next}if(line)lines.push(line);const longest=Math.max(...lines.map(x=>x.length),0);return {width:Math.min(420,Math.max(182,34+(person.photo_url?52:0)+longest*8)),height:Math.max(76,52+lines.length*18),lines} }
+export function cardMetrics(person:TreePersonData):CardMetrics { const lines:string[]=[]; let line=''; for(const word of label(person).split(/\s+/)){const next=line?`${line} ${word}`:word;if(next.length>34&&line){lines.push(line);line=word}else line=next}if(line)lines.push(line);const longest=Math.max(...lines.map(x=>x.length),0);return {width:Math.min(420,Math.max(182,34+(person.photo_url?52:0)+longest*8)),height:Math.max(84,64+lines.length*20),lines} }
 
 export function layoutTreeGraph(data:TreeGraphData,options:LayoutOptions):GraphLayout {
   const generation=generations(data), rows=new Map<number,TreePersonData[]>(), nodes:Record<string,NodePosition>={}, bounds=new Map<number,{y:number;height:number}>()
