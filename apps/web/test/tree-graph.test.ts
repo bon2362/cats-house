@@ -269,3 +269,25 @@ it('places partners next to one another so their line cannot cross another card'
   expect(partnerPath).toBeDefined()
   expect(layout.nodes.boris.x < left || layout.nodes.boris.x > right).toBe(true)
 })
+
+it('places a person between multiple partners so neither union crosses a card', () => {
+  const graph: TreeGraphData = {
+    ...familyGraph,
+    people: [
+      { ...familyGraph.people[0], id: 'anna', display_name: 'Анна', is_root: true },
+      { ...familyGraph.people[1], id: 'boris', display_name: 'Борис', is_root: false },
+      { ...familyGraph.people[2], id: 'clara', display_name: 'Вера', is_root: false },
+    ],
+    unions: [
+      { id: 'first', partner_one_id: 'anna', partner_two_id: 'boris', union_type: 'marriage' },
+      { id: 'second', partner_one_id: 'anna', partner_two_id: 'clara', union_type: 'marriage' },
+    ],
+    parent_links: [],
+  }
+
+  const layout = layoutTreeGraph(graph, { direction: 'vertical' })
+  const x = (id: string) => layout.nodes[id].x
+
+  expect(x('anna')).toBeGreaterThan(x('boris'))
+  expect(x('anna')).toBeLessThan(x('clara'))
+})
