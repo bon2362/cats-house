@@ -93,3 +93,37 @@ it('places the fitted graph below the workspace controls', async () => {
 
   expect(element.shadowRoot?.querySelector('.scene')?.getAttribute('style')).toContain('translate(0px,160px)')
 })
+
+it('opens an inspector only after selecting a card and recentres on double click', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const tree = element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement & { dispatchEvent: (event: Event) => boolean }
+
+  expect(element.shadowRoot?.querySelector('.inspector')).toBeNull()
+  tree.dispatchEvent(new CustomEvent('person-select', { detail: { personId: 'boris' }, bubbles: true, composed: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  expect(element.shadowRoot?.querySelector('.inspector')?.textContent).toContain('Борис')
+
+  tree.dispatchEvent(new CustomEvent('person-center', { detail: { personId: 'boris' }, bubbles: true, composed: true }))
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/tree/boris?mode=mixed&depth=2')
+})
+
+it('fits the graph into the available viewport instead of using a fixed percentage', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const stage = element.shadowRoot?.querySelector('.stage') as HTMLElement
+  Object.defineProperties(stage, { clientWidth: { value: 1600 }, clientHeight: { value: 1000 } })
+  ;[...(element.shadowRoot?.querySelectorAll('button') ?? [])].find((button) => button.textContent === 'Вписать')?.click()
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(element.shadowRoot?.querySelector('.scene')?.getAttribute('style')).toContain('scale(1.6)')
+})
