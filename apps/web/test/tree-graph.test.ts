@@ -125,3 +125,38 @@ it('returns semantic paths and non-overlapping measured cards', () => {
   expect(layout.paths.every((path) => ['parent-child', 'partner', 'expansion'].includes(path.kind))).toBe(true)
   expect(nodes[0].x + nodes[0].width <= nodes[1].x || nodes[1].x + nodes[1].width <= nodes[0].x || nodes[0].y + nodes[0].height <= nodes[1].y || nodes[1].y + nodes[1].height <= nodes[0].y).toBe(true)
 })
+
+it('renders cards in an HTML layer and only renders an avatar when public media exists', async () => {
+  await import('../src/pages/tree-graph')
+  const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData }
+  graph.graph = {
+    ...familyGraph,
+    people: [
+      { ...familyGraph.people[0], photo_url: 'https://media.example.test/anna.jpg' },
+      { ...familyGraph.people[1], photo_url: null },
+      familyGraph.people[2],
+    ],
+  }
+  document.body.append(graph)
+  await (graph as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(graph.shadowRoot?.querySelectorAll('svg .card')).toHaveLength(0)
+  expect(graph.shadowRoot?.querySelectorAll('.card')).toHaveLength(3)
+  expect(graph.shadowRoot?.querySelector('.card[data-person-id="parent"] img')?.getAttribute('src')).toBe('https://media.example.test/anna.jpg')
+  expect(graph.shadowRoot?.querySelector('.card[data-person-id="child"] img')).toBeNull()
+})
+
+it('anchors every vertical connector at the measured edge of its own card', () => {
+  const layout = layoutTreeGraph({
+    ...familyGraph,
+    people: [
+      { ...familyGraph.people[0], display_name: 'Александра Константиновна Переяславцева' },
+      { ...familyGraph.people[1], display_name: 'Борис' },
+      familyGraph.people[2],
+    ],
+  }, { direction: 'vertical' })
+  const path = layout.paths.find((item) => item.kind === 'parent-child' && item.from === 'parent' && item.to === 'child')
+
+  expect(path?.d).toContain(`M ${layout.nodes.parent.x + layout.nodes.parent.width / 2} ${layout.nodes.parent.y + layout.nodes.parent.height}`)
+  expect(path?.d).toContain(`V ${layout.nodes.child.y}`)
+})
