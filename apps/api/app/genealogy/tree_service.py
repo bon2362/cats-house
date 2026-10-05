@@ -71,6 +71,9 @@ def build_tree_graph(
     if mode == "close":
         included_ids = _close_relative_ids(session, root.id)
         people_by_id = {person.id: person for person in session.scalars(select(Person).where(Person.id.in_(included_ids))).all()}
+    elif mode == "mixed":
+        included_ids = _mixed_relative_ids(session, root.id, depth)
+        people_by_id = {person.id: person for person in session.scalars(select(Person).where(Person.id.in_(included_ids))).all()}
     elif mode == "path":
         if related_to is None:
             raise ValueError("Для режима «Как связаны» выберите второго человека.")
@@ -88,9 +91,9 @@ def build_tree_graph(
             if level >= depth:
                 continue
             related_ids: list[UUID] = []
-            if mode in {"descendants", "mixed"}:
+            if mode == "descendants":
                 related_ids.extend(session.scalars(select(ParentChild.child_id).where(ParentChild.parent_id == current_id)).all())
-            if mode in {"ancestors", "mixed"}:
+            if mode == "ancestors":
                 related_ids.extend(session.scalars(select(ParentChild.parent_id).where(ParentChild.child_id == current_id)).all())
             related_people = session.scalars(select(Person).where(Person.id.in_(related_ids))).all()
             for person in related_people:
@@ -168,6 +171,25 @@ def build_tree_graph(
         partner_links=graph_unions,
         relation_path=relation_path,
     )
+
+
+def _mixed_relative_ids(session: Session, root_id: UUID, depth: int) -> set[UUID]:
+    included_ids = {root_id}
+    for relation_column, person_column in (
+        (ParentChild.parent_id, ParentChild.child_id),
+        (ParentChild.child_id, ParentChild.parent_id),
+    ):
+        queue = deque([(root_id, 0)])
+        while queue:
+            current_id, level = queue.popleft()
+            if level >= depth:
+                continue
+            related_ids = session.scalars(select(relation_column).where(person_column == current_id)).all()
+            for related_id in related_ids:
+                if related_id not in included_ids:
+                    included_ids.add(related_id)
+                    queue.append((related_id, level + 1))
+    return included_ids
 
 
 def _close_relative_ids(session: Session, root_id: UUID) -> set[UUID]:
