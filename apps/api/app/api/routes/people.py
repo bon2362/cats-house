@@ -5,7 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
-from app.genealogy.read_service import featured_person, get_public_person, public_events, public_family, public_person_media, search_people
+from app.genealogy.read_service import featured_person, get_public_person, normalize_public_name, public_events, public_family, public_person_media, public_person_summary, search_people
 
 router = APIRouter()
 
@@ -13,6 +13,11 @@ router = APIRouter()
 class PersonSearchResponse(BaseModel):
     id: UUID
     display_name: str
+    birth_label: str | None = None
+    death_label: str | None = None
+    years: str | None = None
+    is_living: bool | None = None
+    parents_label: str | None = None
 
 
 class EventResponse(BaseModel):
@@ -35,20 +40,20 @@ class PersonResponse(PersonSearchResponse):
     media: list[PublicMediaResponse]
 
 
-@router.get("/people", response_model=list[PersonSearchResponse])
+@router.get("/people", response_model=list[PersonSearchResponse], response_model_exclude_none=True)
 def search(query: str = Query(default=""), session: Session = Depends(get_session)) -> list[PersonSearchResponse]:
-    return [PersonSearchResponse(id=person.id, display_name=person.display_name) for person in search_people(session, query)]
+    return [PersonSearchResponse(**public_person_summary(session, person).__dict__) for person in search_people(session, query)]
 
 
-@router.get("/people/featured", response_model=PersonSearchResponse)
+@router.get("/people/featured", response_model=PersonSearchResponse, response_model_exclude_none=True)
 def get_featured_person(session: Session = Depends(get_session)) -> PersonSearchResponse:
     person = featured_person(session)
     if person is None:
         raise HTTPException(status_code=404, detail="В семейном архиве пока нет людей.")
-    return PersonSearchResponse(id=person.id, display_name=person.display_name)
+    return PersonSearchResponse(**public_person_summary(session, person).__dict__)
 
 
-@router.get("/people/{person_id}", response_model=PersonResponse)
+@router.get("/people/{person_id}", response_model=PersonResponse, response_model_exclude_none=True)
 def get_person(person_id: UUID, request: Request, session: Session = Depends(get_session)) -> PersonResponse:
     person = get_public_person(session, person_id)
     if person is None:
@@ -56,12 +61,12 @@ def get_person(person_id: UUID, request: Request, session: Session = Depends(get
     parents, children, partners = public_family(session, person.id)
     return PersonResponse(
         id=person.id,
-        display_name=person.display_name,
+        display_name=normalize_public_name(person.display_name),
         biography=person.biography,
         events=[EventResponse(event_type=event.event_type, date_text=event.date_text) for event in public_events(session, person.id)],
-        parents=[PersonSearchResponse(id=related.id, display_name=related.display_name) for related in parents],
-        children=[PersonSearchResponse(id=related.id, display_name=related.display_name) for related in children],
-        partners=[PersonSearchResponse(id=related.id, display_name=related.display_name) for related in partners],
+        parents=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in parents],
+        children=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in children],
+        partners=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in partners],
         media=[
             PublicMediaResponse(
                 id=item.id,

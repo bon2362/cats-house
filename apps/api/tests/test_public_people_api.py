@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models.genealogy import ImportRun, Media, MediaLink, ParentChild, Person, Union
+from app.models.genealogy import Event, ImportRun, Media, MediaLink, ParentChild, Person, Union
 
 
 @pytest.fixture
@@ -53,6 +53,34 @@ def test_public_search_treats_yo_and_e_as_equivalent(client, database_session):
 
     assert response.status_code == 200
     assert response.json() == [{"id": str(person.id), "display_name": "Фёдор Архипов"}]
+
+
+def test_public_catalogue_exposes_normalized_person_context(client, database_session):
+    person = add_person(database_session, "Евдокия ??? ???")
+    parent = Person(import_run_id=person.import_run_id, display_name="Пётр ???", source_uid=str(uuid4()))
+    database_session.add(parent)
+    database_session.flush()
+    database_session.add_all(
+        [
+            ParentChild(parent_id=parent.id, child_id=person.id, relationship_type="biological"),
+            Event(person_id=person.id, event_type="BIRT", date_text="ABT 1901"),
+            Event(person_id=person.id, event_type="DEAT", date_text="19 FEB 1951"),
+        ]
+    )
+    database_session.commit()
+
+    response = client.get("/api/v1/people?query=Евдокия")
+
+    assert response.status_code == 200
+    assert response.json() == [{
+        "id": str(person.id),
+        "display_name": "Евдокия",
+        "birth_label": "ок. 1901",
+        "death_label": "19 февраля 1951",
+        "years": "1901 – 1951",
+        "is_living": False,
+        "parents_label": "Пётр",
+    }]
 
 
 def test_public_card_returns_person_without_login(client, database_session):
