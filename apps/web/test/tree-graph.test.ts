@@ -1,6 +1,6 @@
 import { expect, it } from 'vitest'
 
-import { layoutTreeGraph, type TreeGraphData } from '../src/pages/tree-graph'
+import { cardMetrics, layoutTreeGraph, type TreeGraphData } from '../src/pages/tree-graph'
 
 const familyGraph: TreeGraphData = {
   people: [
@@ -101,4 +101,27 @@ it('renders a hidden person as a non-identifying card', async () => {
   expect(graph.shadowRoot?.textContent).toContain('Сведения скрыты')
   expect(graph.shadowRoot?.textContent).not.toContain('Скрытая Анна')
   expect(graph.shadowRoot?.querySelector('svg')).not.toBeNull()
+})
+
+it('gives a long full name a wider card instead of truncating it', () => {
+  const short = cardMetrics({ ...familyGraph.people[0], display_name: 'Анна' })
+  const long = cardMetrics({ ...familyGraph.people[0], display_name: 'Александра Константиновна Переяславцева' })
+
+  expect(long.width).toBeGreaterThan(short.width)
+  expect(long.lines.join(' ')).toContain('Переяславцева')
+})
+
+it('returns semantic paths and non-overlapping measured cards', () => {
+  const graph: TreeGraphData = {
+    ...familyGraph,
+    people: [
+      { ...familyGraph.people[0], display_name: 'Александра Константиновна Переяславцева' },
+      { ...familyGraph.people[1], display_name: 'Борис Александрович Переяславцев' },
+    ],
+  }
+  const layout = layoutTreeGraph(graph, { direction: 'vertical' })
+  const nodes = Object.values(layout.nodes)
+
+  expect(layout.paths.every((path) => ['parent-child', 'partner', 'expansion'].includes(path.kind))).toBe(true)
+  expect(nodes[0].x + nodes[0].width <= nodes[1].x || nodes[1].x + nodes[1].width <= nodes[0].x || nodes[0].y + nodes[0].height <= nodes[1].y || nodes[1].y + nodes[1].height <= nodes[0].y).toBe(true)
 })

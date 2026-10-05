@@ -5,10 +5,12 @@ export type TreeUnionData = { id: string; partner_one_id: string | null; partner
 export type TreeParentLinkData = { parent_id: string; child_id: string; union_id?: string | null; relationship_type: string }
 export type TreeGraphData = { people: TreePersonData[]; unions: TreeUnionData[]; partner_links: TreeUnionData[]; parent_links: TreeParentLinkData[]; links: { parent_id: string; child_id: string }[]; relation_path: { person_ids: string[]; labels: string[]; common_ancestor_id: string | null } | null }
 export type LayoutOptions = { direction: 'vertical' | 'horizontal' }
-export type NodePosition = { x: number; y: number; generation: number }
+export type CardMetrics = { width: number; height: number; lines: string[] }
+export type NodePosition = { x: number; y: number; generation: number; width: number; height: number }
 export type UnionPosition = { x: number; y: number; generation: number }
 export type GenerationBand = { generation: number; label: string; x: number; y: number; width: number; height: number; alternate: boolean }
-export type GraphLayout = { nodes: Record<string, NodePosition>; unions: Record<string, UnionPosition>; bands: GenerationBand[]; width: number; height: number }
+export type GraphPath = { kind: 'partner' | 'parent-child' | 'expansion'; from: string; to: string }
+export type GraphLayout = { nodes: Record<string, NodePosition>; unions: Record<string, UnionPosition>; bands: GenerationBand[]; paths: GraphPath[]; width: number; height: number }
 
 export const CARD_WIDTH = 232
 export const CARD_HEIGHT = 76
@@ -17,6 +19,20 @@ const FAMILY_GAP = 52
 const ROW_GAP = 132
 const HORIZONTAL_PADDING = 240
 const VERTICAL_PADDING = 72
+
+export function cardMetrics(person: TreePersonData): CardMetrics {
+  const label = personLabel(person)
+  const words = label.split(/\s+/)
+  const lines: string[] = []
+  let line = ''
+  for (const word of words) {
+    const next = line ? `${line} ${word}` : word
+    if (next.length > 34 && line) { lines.push(line); line = word } else line = next
+  }
+  if (line) lines.push(line)
+  const longest = Math.max(...lines.map((item) => item.length), 0)
+  return { width: Math.min(420, Math.max(182, 48 + longest * 8)), height: Math.max(CARD_HEIGHT, 52 + lines.length * 18), lines }
+}
 
 export function layoutTreeGraph(data: TreeGraphData, options: LayoutOptions): GraphLayout {
   const people = new Map(data.people.map((person) => [person.id, person]))
@@ -40,8 +56,9 @@ export function layoutTreeGraph(data: TreeGraphData, options: LayoutOptions): Gr
     let cursor = HORIZONTAL_PADDING
     for (const group of groups) {
       for (const person of group) {
-        nodes[person.id] = { x: cursor, y, generation }
-        cursor += CARD_WIDTH + COLUMN_GAP
+        const metrics = cardMetrics(person)
+        nodes[person.id] = { x: cursor, y, generation, width: metrics.width, height: metrics.height }
+        cursor += metrics.width + COLUMN_GAP
       }
       cursor += FAMILY_GAP - COLUMN_GAP
     }
@@ -52,20 +69,24 @@ export function layoutTreeGraph(data: TreeGraphData, options: LayoutOptions): Gr
     const second = union.partner_two_id ? nodes[union.partner_two_id] : undefined
     if (!first || !second || first.generation !== second.generation) continue
     unions[union.id] = {
-      x: (first.x + second.x + CARD_WIDTH) / 2,
-      y: first.y + CARD_HEIGHT + 26,
+      x: (first.x + first.width + second.x) / 2,
+      y: first.y + first.height + 26,
       generation: first.generation,
     }
   }
 
-  const maxX = Math.max(HORIZONTAL_PADDING * 2, ...Object.values(nodes).map((node) => node.x + CARD_WIDTH + HORIZONTAL_PADDING))
-  const maxY = Math.max(VERTICAL_PADDING * 2, ...Object.values(nodes).map((node) => node.y + CARD_HEIGHT + VERTICAL_PADDING))
+  const maxX = Math.max(HORIZONTAL_PADDING * 2, ...Object.values(nodes).map((node) => node.x + node.width + HORIZONTAL_PADDING))
+  const maxY = Math.max(VERTICAL_PADDING * 2, ...Object.values(nodes).map((node) => node.y + node.height + VERTICAL_PADDING))
   const bands = orderedGenerations.map((generation, index) => ({ generation, label: generationLabel(generation), x: 0, y: VERTICAL_PADDING + (generation - minGeneration) * (CARD_HEIGHT + ROW_GAP) - ROW_GAP / 2, width: maxX, height: CARD_HEIGHT + ROW_GAP, alternate: index % 2 === 1 }))
-  if (options.direction === 'vertical') return { nodes, unions, bands, width: maxX, height: maxY }
+  const paths: GraphPath[] = data.unions.flatMap((union) => {
+    const partners = [union.partner_one_id, union.partner_two_id].filter((id): id is string => Boolean(id))
+    return partners.length === 2 ? [{ kind: 'partner' as const, from: partners[0], to: partners[1] }] : []
+  }).concat(data.parent_links.map((link) => ({ kind: 'parent-child' as const, from: link.parent_id, to: link.child_id })))
+  if (options.direction === 'vertical') return { nodes, unions, bands, paths, width: maxX, height: maxY }
   return {
     nodes: Object.fromEntries(Object.entries(nodes).map(([id, node]) => [id, { x: node.y, y: node.x, generation: node.generation }])),
     unions: Object.fromEntries(Object.entries(unions).map(([id, node]) => [id, { x: node.y, y: node.x, generation: node.generation }])),
-    bands: bands.map((band) => ({ ...band, x: band.y, y: 0, width: band.height, height: maxX })), width: maxY, height: maxX,
+    bands: bands.map((band) => ({ ...band, x: band.y, y: 0, width: band.height, height: maxX })), paths, width: maxY, height: maxX,
   }
 }
 
@@ -106,7 +127,8 @@ export class CatsTreeGraph extends LitElement {
   private renderPerson(person: TreePersonData, position: NodePosition | undefined) {
     if (!position) return null
     const label = personLabel(person); const dates = [person.birth_label, person.death_label].filter(Boolean).join(' – ') || 'нет данных'; const role = person.is_root ? 'В ЦЕНТРЕ' : person.sex === 'F' ? 'РОДСТВЕННИЦА' : person.sex === 'M' ? 'РОДСТВЕННИК' : 'УЧАСТНИК СЕМЬИ'
-    return svg`<g class="card ${person.is_root ? 'root' : ''} ${person.is_hidden ? 'hidden' : ''} ${this.selectedId === person.id ? 'selected' : ''}" role="button" tabindex="0" aria-label="${label}" @click=${() => this.selectPerson(person.id)} @dblclick=${() => this.centerPerson(person.id)} @keydown=${(event: KeyboardEvent) => this.onKeydown(event, person.id)}><rect x="${position.x}" y="${position.y}" width="${CARD_WIDTH}" height="${CARD_HEIGHT}"></rect><rect class="initials" x="${position.x + 14}" y="${position.y + 22}" width="34" height="34" rx="2"></rect><text class="monogram" x="${position.x + 31}" y="${position.y + 44}" text-anchor="middle">${initials(label)}</text><text class="eyebrow" x="${position.x + 61}" y="${position.y + 23}">${role}</text><text class="name" x="${position.x + 61}" y="${position.y + 42}">${truncate(label)}</text><text class="date" x="${position.x + 61}" y="${position.y + 61}">${dates}</text></g>`
+    const metrics = cardMetrics(person)
+    return svg`<g class="card ${person.is_root ? 'root' : ''} ${person.is_hidden ? 'hidden' : ''} ${this.selectedId === person.id ? 'selected' : ''}" role="button" tabindex="0" aria-label="${label}" @click=${() => this.selectPerson(person.id)} @dblclick=${() => this.centerPerson(person.id)} @keydown=${(event: KeyboardEvent) => this.onKeydown(event, person.id)}><rect x="${position.x}" y="${position.y}" width="${position.width}" height="${position.height}"></rect><rect class="initials" x="${position.x + 14}" y="${position.y + 22}" width="34" height="34" rx="2"></rect><text class="monogram" x="${position.x + 31}" y="${position.y + 44}" text-anchor="middle">${initials(label)}</text><text class="eyebrow" x="${position.x + 61}" y="${position.y + 23}">${role}</text>${metrics.lines.map((line, index) => svg`<text class="name" x="${position.x + 61}" y="${position.y + 42 + index * 18}">${line}</text>`)}<text class="date" x="${position.x + 61}" y="${position.y + position.height - 15}">${dates}</text></g>`
   }
   private selectPerson(personId: string) { this.dispatchEvent(new CustomEvent('person-select', { detail: { personId }, bubbles: true, composed: true })) }
   private centerPerson(personId: string) { this.dispatchEvent(new CustomEvent('person-center', { detail: { personId }, bubbles: true, composed: true })) }
@@ -218,5 +240,4 @@ function connector(parent: NodePosition, child: NodePosition, direction: LayoutO
 function generationLabel(generation: number) { if (generation === 0) return 'ПОКОЛЕНИЕ ЦЕНТРА'; if (generation === 1) return 'ДЕТИ'; if (generation === 2) return 'ВНУКИ'; if (generation === -1) return 'РОДИТЕЛИ'; if (generation === -2) return 'БАБУШКИ И ДЕДУШКИ'; return generation > 0 ? `ПОТОМКИ · ${generation}-Е ПОКОЛЕНИЕ` : `ПРЕДКИ · ${Math.abs(generation)}-Е ПОКОЛЕНИЕ` }
 function personLabel(person: TreePersonData) { return person.is_hidden ? 'Сведения скрыты' : person.display_name || 'Неизвестный человек' }
 function initials(label: string) { return label.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() || '?' }
-function truncate(value: string) { return value.length > 25 ? `${value.slice(0, 24)}…` : value }
 customElements.define('cats-tree-graph', CatsTreeGraph)
