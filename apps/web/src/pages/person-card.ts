@@ -1,9 +1,20 @@
 import { LitElement, css, html, nothing } from 'lit'
 
-type PublicEvent = { event_type: string; date_text: string | null }
+type PublicEvent = {
+  event_type: string
+  date_text: string | null
+  date_label_ru?: string | null
+  place?: string | null
+  description?: string | null
+}
 type PublicRelation = { id: string; display_name: string }
 type PublicMedia = { id: string; original_filename: string; url: string }
-type PublicPerson = { id: string; display_name: string; biography: string | null; events: PublicEvent[]; parents: PublicRelation[]; children: PublicRelation[]; partners: PublicRelation[]; media: PublicMedia[] }
+type PublicPerson = {
+  id: string; display_name: string; biography: string | null; events: PublicEvent[]; parents: PublicRelation[]; children: PublicRelation[]; partners: PublicRelation[]; media: PublicMedia[]
+  birth_label_ru?: string | null; death_label_ru?: string | null
+  birth_year?: number | null; death_year?: number | null
+  birth_place?: string | null; death_place?: string | null; is_living?: boolean | null
+}
 
 const eventNames: Record<string, string> = { BIRT: 'Рождение', BIRTH: 'Рождение', DEAT: 'Смерть', DEATH: 'Смерть', MARR: 'Брак', DIV: 'Развод', BURI: 'Погребение', RESI: 'Место жительства', OCCU: 'Занятие', MILI: 'Военная служба', EDUC: 'Образование', BAPM: 'Крещение', CHR: 'Крещение' }
 const russianMonths: Record<string, string> = { JAN: 'января', FEB: 'февраля', MAR: 'марта', APR: 'апреля', MAY: 'мая', JUN: 'июня', JUL: 'июля', AUG: 'августа', SEP: 'сентября', OCT: 'октября', NOV: 'ноября', DEC: 'декабря' }
@@ -22,7 +33,8 @@ function formatDate(value: string | null): string {
   return cleaned
 }
 
-function eventYear(event: PublicEvent): string { return event.date_text?.match(/\d{4}/)?.[0] ?? '—' }
+function eventDate(event: PublicEvent): string { return event.date_label_ru?.trim() || formatDate(event.date_text) }
+function eventYear(event: PublicEvent): string { return (event.date_label_ru ?? event.date_text ?? '').match(/\d{4}/)?.[0] ?? '—' }
 function initials(name: string): string { return (name.match(/[A-Za-zА-Яа-яЁё]+/g) ?? []).slice(0, 2).map((part) => part[0].toUpperCase()).join('') || '—' }
 
 export class CatsPersonCard extends LitElement {
@@ -43,16 +55,30 @@ export class CatsPersonCard extends LitElement {
 
   render() {
     const person = this.person
-    const events = [...(person.events ?? [])].sort((a, b) => (a.date_text ?? '').localeCompare(b.date_text ?? ''))
-    const life = this.lifeLine(events)
+    const events = [...(person.events ?? [])].filter((event) => this.hasVisibleDetail(event)).sort((a, b) => this.eventSortKey(a).localeCompare(this.eventSortKey(b)))
+    const life = this.lifeLine(person, events)
     return html`<div class="page"><nav class="contents" aria-label="Разделы страницы человека"><a href="/">← Все люди</a><a href="#family">Семья</a><a href="#timeline">Хронология</a><a href="#biography">Биография</a><a href="#media">Фото и документы</a></nav><main><header class="hero"><div class="monogram" aria-label="Монограмма">${initials(person.display_name)}</div><div><p class="eyebrow">Профиль человека</p><h1>${person.display_name}</h1>${life ? html`<p class="life">${life}</p>` : html`<p class="life">Годы жизни в архиве не указаны</p>`}${person.biography ? html`<p class="bio">${person.biography}</p>` : nothing}<div class="actions"><a class="button primary" href="/tree?person=${person.id}">Построить дерево</a><a class="button" href="${window.location.href}">Скопировать ссылку</a></div></div></header><section id="family"><p class="section-kicker">Связи в архиве</p><h2>Семья</h2>${this.renderFamilyMap()}<div class="family-columns"><div><h3>Родители</h3>${this.renderRelationList(person.parents,'Родители в архиве не указаны')}</div><div><h3>Союзы и дети</h3>${this.renderUnions()}</div><div><h3>Братья и сёстры</h3><p class="empty">Братья и сёстры в архиве пока не указаны</p></div></div></section><section id="timeline"><p class="section-kicker">По датам</p><h2>Хронология</h2>${events.length ? html`<div class="timeline">${events.map((event) => this.renderEvent(event))}</div>` : html`<p class="empty">Хронология пока не заполнена</p>`}</section><section id="biography"><p class="section-kicker">Личная история</p><h2>Биография</h2>${person.biography ? html`<p class="bio">${person.biography}</p>` : html`<p class="empty">Биография пока не написана</p>`}</section><section id="media"><p class="section-kicker">Архив</p><h2>Фото и документы</h2>${(person.media ?? []).length ? html`<div class="media">${person.media.map((item) => html`<a href="${item.url}" target="_blank" rel="noopener">${item.original_filename}</a>`)}</div>` : html`<p class="empty">Фото и документы пока не добавлены</p>`}</section></main></div>`
   }
 
-  private lifeLine(events: PublicEvent[]) { const birth = events.find((event) => ['BIRT','BIRTH'].includes(event.event_type))?.date_text; const death = events.find((event) => ['DEAT','DEATH'].includes(event.event_type))?.date_text; return !birth && !death ? '' : `${birth ? formatDate(birth) : '?'} — ${death ? formatDate(death) : 'н. в.'}` }
+  private lifeLine(person: PublicPerson, events: PublicEvent[]) {
+    const birthEvent = events.find((event) => ['BIRT', 'BIRTH'].includes(event.event_type))
+    const deathEvent = events.find((event) => ['DEAT', 'DEATH'].includes(event.event_type))
+    const birth = person.birth_label_ru?.trim() || (person.birth_year ? String(person.birth_year) : birthEvent ? eventDate(birthEvent) : '')
+    const death = person.death_label_ru?.trim() || (person.death_year ? String(person.death_year) : deathEvent ? eventDate(deathEvent) : '')
+    if (!birth && !death) return ''
+    const born = birth ? `${birth}${person.birth_place ? `, ${person.birth_place}` : ''}` : '?'
+    const died = death ? `${death}${person.death_place ? `, ${person.death_place}` : ''}` : person.is_living ? 'н. в.' : '?'
+    return `${born} — ${died}`
+  }
   private renderFamilyMap() { const people = [this.person.parents?.[0], this.person, this.person.partners?.[0], this.person.children?.[0]].filter(Boolean) as (PublicRelation | PublicPerson)[]; return html`<div class="family-map" aria-label="Ближайшая семья">${people.map((person,index) => html`${index ? html`<span class="connector"></span>` : nothing}<div class="mini-card ${person.id === this.person.id ? 'focus' : ''}">${person.display_name}</div>`)}</div>` }
   private renderRelationList(relations: PublicRelation[], empty: string) { return relations?.length ? html`<ul class="relation-list">${relations.map((person) => html`<li><a href="/people/${person.id}">${person.display_name}</a></li>`)}</ul>` : html`<p class="empty">${empty}</p>` }
   private renderUnions() { const partners = this.person.partners ?? []; const children = this.person.children ?? []; if (!partners.length && !children.length) return html`<p class="empty">Союзы и дети в архиве не указаны</p>`; return html`${partners.map((partner) => html`<div class="union"><a href="/people/${partner.id}">${partner.display_name}</a><div class="children">${children.length ? children.map((child) => html`<a href="/people/${child.id}">Ребёнок · ${child.display_name}</a>`) : html`<span class="empty">Дети в архиве не указаны</span>`}</div></div>`)}${!partners.length ? this.renderRelationList(children,'') : nothing}` }
-  private renderEvent(event: PublicEvent) { return html`<article class="event"><div class="event-year">${eventYear(event)}</div><div><div class="event-name">${eventNames[event.event_type] ?? 'Событие'}</div><div class="event-date">${formatDate(event.date_text)}</div></div></article>` }
+  private hasVisibleDetail(event: PublicEvent) { return Boolean(event.date_label_ru?.trim() || event.date_text?.trim() || event.place?.trim() || event.description?.trim()) }
+  private eventSortKey(event: PublicEvent) { return event.date_label_ru ?? event.date_text ?? '' }
+  private renderEvent(event: PublicEvent) {
+    const facts = [eventDate(event), event.place?.trim()].filter((value) => value && value !== 'дата неизвестна')
+    return html`<article class="event"><div class="event-year">${eventYear(event)}</div><div><div class="event-name">${eventNames[event.event_type] ?? 'Событие'}</div>${facts.length ? html`<div class="event-date">${facts.join(' · ')}</div>` : nothing}${event.description?.trim() ? html`<div class="event-date">${event.description.trim()}</div>` : nothing}</div></article>`
+  }
 }
 
 customElements.define('cats-person-card', CatsPersonCard)

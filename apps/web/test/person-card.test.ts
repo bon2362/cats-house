@@ -56,3 +56,28 @@ it('uses clear empty states instead of empty family and event lists', async () =
   expect(element.shadowRoot?.textContent).toContain('Хронология пока не заполнена')
   expect(element.shadowRoot?.textContent).toContain('Биография пока не написана')
 })
+
+it('uses extended life details when the API provides them and omits empty events', async () => {
+  const element = document.createElement('cats-person-card') as HTMLElement & { person: unknown }
+  element.person = {
+    id: 'extended-id',
+    display_name: 'Мария Петрова',
+    biography: null,
+    birth_label_ru: '14 мая 1895',
+    death_label_ru: '2 февраля 1962',
+    birth_place: 'д. Ольховка',
+    death_place: 'Калинин',
+    events: [
+      { event_type: 'BIRT', date_text: null },
+      { event_type: 'RESI', date_label_ru: '1934', place: 'Торжок', description: 'Переезд' },
+    ],
+    parents: [], children: [], partners: [], media: [],
+  }
+  document.body.append(element)
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(element.shadowRoot?.textContent).toContain('14 мая 1895, д. Ольховка — 2 февраля 1962, Калинин')
+  expect(element.shadowRoot?.textContent).toContain('Место жительства')
+  expect(element.shadowRoot?.textContent).toContain('1934 · Торжок')
+  expect(element.shadowRoot?.textContent).not.toContain('Рождениедата неизвестна')
+})
