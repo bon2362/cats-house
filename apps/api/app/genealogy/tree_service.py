@@ -72,6 +72,9 @@ def build_tree_graph(
     if mode == "close":
         included_ids = _close_relative_ids(session, root.id)
         people_by_id = {person.id: person for person in session.scalars(select(Person).where(Person.id.in_(included_ids))).all()}
+    elif mode == "all":
+        included_ids = _all_relative_ids(session, root.id)
+        people_by_id = {person.id: person for person in session.scalars(select(Person).where(Person.id.in_(included_ids))).all()}
     elif mode == "mixed":
         included_ids = _mixed_relative_ids(session, root.id, depth)
         people_by_id = {person.id: person for person in session.scalars(select(Person).where(Person.id.in_(included_ids))).all()}
@@ -172,6 +175,26 @@ def build_tree_graph(
         partner_links=graph_unions,
         relation_path=relation_path,
     )
+
+
+def _all_relative_ids(session: Session, root_id: UUID) -> set[UUID]:
+    adjacency: dict[UUID, set[UUID]] = {}
+    for link in session.scalars(select(ParentChild)).all():
+        adjacency.setdefault(link.parent_id, set()).add(link.child_id)
+        adjacency.setdefault(link.child_id, set()).add(link.parent_id)
+    for union in session.scalars(select(Union)).all():
+        if union.partner_one_id is not None and union.partner_two_id is not None:
+            adjacency.setdefault(union.partner_one_id, set()).add(union.partner_two_id)
+            adjacency.setdefault(union.partner_two_id, set()).add(union.partner_one_id)
+
+    visited = {root_id}
+    queue = deque([root_id])
+    while queue:
+        for related_id in adjacency.get(queue.popleft(), ()):
+            if related_id not in visited:
+                visited.add(related_id)
+                queue.append(related_id)
+    return visited
 
 
 def _mixed_relative_ids(session: Session, root_id: UUID, depth: int) -> set[UUID]:
