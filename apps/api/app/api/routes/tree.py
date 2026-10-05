@@ -55,7 +55,7 @@ class TreeResponse(BaseModel):
 def get_tree(
     person_id: UUID,
     mode: str = Query(pattern="^(close|ancestors|descendants|mixed|path)$"),
-    depth: int = Query(default=2, ge=0, le=5),
+    depth: int = Query(default=2, ge=1, le=5),
     related_to: UUID | None = Query(default=None, alias="to"),
     session: Session = Depends(get_session),
 ) -> TreeResponse:

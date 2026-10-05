@@ -226,3 +226,15 @@ def test_path_mode_returns_null_for_unrelated_people(client, database_session):
 
     assert response.status_code == 200
     assert response.json()["relation_path"] is None
+
+
+def test_tree_rejects_depth_below_one(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="9" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    person = create_person(database_session, run, "Анна")
+    database_session.commit()
+
+    response = client.get(f"/api/v1/tree/{person.id}?mode=close&depth=0")
+
+    assert response.status_code == 422
