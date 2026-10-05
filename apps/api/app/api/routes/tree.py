@@ -55,7 +55,7 @@ class TreeResponse(BaseModel):
 @router.get("/tree/{person_id}", response_model=TreeResponse)
 def get_tree(
     person_id: UUID,
-    mode: str = Query(pattern="^(close|ancestors|descendants|mixed|path)$"),
+    mode: str = Query(pattern="^(close|ancestors|descendants|mixed|path|all)$"),
     depth: int = Query(default=2, ge=1, le=5),
     related_to: UUID | None = Query(default=None, alias="to"),
     session: Session = Depends(get_session),
