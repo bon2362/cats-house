@@ -1,15 +1,47 @@
-import { expect, it, vi } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 
 import '../src/pages/tree-page'
 
-it('loads a mixed tree and switches its mode', async () => {
-  const fetchMock = vi.fn().mockResolvedValue({
-    ok: true,
-    json: async () => ({
-      people: [{ id: 'anna', display_name: 'Анна' }, { id: 'boris', display_name: 'Борис' }],
-      links: [{ parent_id: 'anna', child_id: 'boris' }],
-    }),
-  })
+const graph = {
+  people: [
+    { id: 'anna', display_name: 'Анна', sex: 'F', birth_label: '1900', death_label: null, is_hidden: false, is_root: true },
+    { id: 'boris', display_name: 'Борис', sex: 'M', birth_label: '1930', death_label: null, is_hidden: false, is_root: false },
+  ],
+  unions: [],
+  partner_links: [],
+  parent_links: [{ parent_id: 'anna', child_id: 'boris', relationship_type: 'biological' }],
+  links: [{ parent_id: 'anna', child_id: 'boris' }],
+  relation_path: null,
+}
+
+afterEach(() => {
+  document.body.replaceChildren()
+  vi.unstubAllGlobals()
+  history.replaceState({}, '', '/')
+})
+
+it('loads close relatives by default and writes the selected mode into the URL', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  history.replaceState({}, '', '/tree?person=anna')
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/tree/anna?mode=close&depth=2')
+  const descendants = [...(element.shadowRoot?.querySelectorAll('button') ?? [])].find((button) => button.textContent?.includes('Потомки'))
+  descendants?.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  expect(window.location.search).toContain('mode=descendants')
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/tree/anna?mode=descendants&depth=2')
+  expect(element.shadowRoot?.querySelector('cats-tree-graph')).not.toBeNull()
+})
+
+it('shows a recoverable Russian error when graph loading fails', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: false })
   vi.stubGlobal('fetch', fetchMock)
   const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
   element.rootId = 'anna'
@@ -17,9 +49,6 @@ it('loads a mixed tree and switches its mode', async () => {
   await new Promise((resolve) => setTimeout(resolve, 0))
   await (element as unknown as { updateComplete: Promise<void> }).updateComplete
 
-  expect(fetchMock).toHaveBeenCalledWith('/api/v1/tree/anna?mode=mixed&depth=3')
-  expect(element.shadowRoot?.textContent).toContain('Анна → Борис')
-  ;(element.shadowRoot?.querySelector('button') as HTMLButtonElement).click()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  expect(fetchMock).toHaveBeenCalledWith('/api/v1/tree/anna?mode=ancestors&depth=3')
+  expect(element.shadowRoot?.textContent).toContain('Не удалось загрузить ветвь')
+  expect([...(element.shadowRoot?.querySelectorAll('button') ?? [])].some((button) => button.textContent?.includes('Повторить'))).toBe(true)
 })
