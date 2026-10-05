@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.genealogy.read_service import normalize_public_name
 from app.models.genealogy import Event, ParentChild, Person, Union
 
 
@@ -137,7 +138,7 @@ def build_tree_graph(
     people = [
         TreePerson(
             id=person.id,
-            display_name=None if person.is_archived else person.display_name,
+            display_name=None if person.is_archived else normalize_public_name(person.display_name),
             sex=None if person.is_archived else person.sex,
             birth_label=None if person.is_archived else life_labels.get(person.id, {}).get("birth"),
             death_label=None if person.is_archived else life_labels.get(person.id, {}).get("death"),

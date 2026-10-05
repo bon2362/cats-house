@@ -37,6 +37,19 @@ def test_descendant_tree_respects_depth(client, database_session):
     assert response.json()["links"] == [{"parent_id": str(root.id), "child_id": str(child.id)}]
 
 
+def test_tree_normalizes_unknown_name_fragments_for_public_cards(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="n" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    root = create_person(database_session, run, "Евдокия ??? ???")
+    database_session.commit()
+
+    response = client.get(f"/api/v1/tree/{root.id}?mode=mixed&depth=1")
+
+    assert response.status_code == 200
+    assert response.json()["people"][0]["display_name"] == "Евдокия"
+
+
 def test_descendant_tree_returns_union_and_typed_parent_link(client, database_session):
     run = ImportRun(original_filename="family.ged", sha256="2" * 64, state="applied", normalized_payload={}, counts={})
     database_session.add(run)
