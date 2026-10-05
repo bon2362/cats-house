@@ -190,6 +190,13 @@ it('allocates enough height for every name line and the date', () => {
   expect(metrics.height).toBeGreaterThanOrEqual(100)
 })
 
+it('accounts for every wrapped line in a long name without spaces', () => {
+  const metrics = cardMetrics({ ...familyGraph.people[0], display_name: 'СверхдлиннаяНеразрывнаяФамилияКотораяНеПомещаетсяВОднуСтрокуКарточки' })
+
+  expect(metrics.lines.length).toBeGreaterThan(1)
+  expect(metrics.height).toBeGreaterThanOrEqual(64 + metrics.lines.length * 20)
+})
+
 it('returns semantic paths and non-overlapping measured cards', () => {
   const graph: TreeGraphData = {
     ...familyGraph,
@@ -290,4 +297,28 @@ it('places a person between multiple partners so neither union crosses a card', 
 
   expect(x('anna')).toBeGreaterThan(x('boris'))
   expect(x('anna')).toBeLessThan(x('clara'))
+})
+
+it('routes a third union around intervening partner cards', () => {
+  const graph: TreeGraphData = {
+    ...familyGraph,
+    people: [
+      { ...familyGraph.people[0], id: 'anna', display_name: 'Анна', is_root: true },
+      { ...familyGraph.people[1], id: 'boris', display_name: 'Борис', is_root: false },
+      { ...familyGraph.people[2], id: 'clara', display_name: 'Вера', is_root: false },
+      { ...familyGraph.people[2], id: 'daria', display_name: 'Галина', is_root: false },
+    ],
+    unions: [
+      { id: 'first', partner_one_id: 'anna', partner_two_id: 'boris', union_type: 'marriage' },
+      { id: 'second', partner_one_id: 'anna', partner_two_id: 'clara', union_type: 'marriage' },
+      { id: 'third', partner_one_id: 'anna', partner_two_id: 'daria', union_type: 'marriage' },
+    ],
+    parent_links: [],
+  }
+
+  const layout = layoutTreeGraph(graph, { direction: 'vertical' })
+  const third = layout.paths.find((path) => path.kind === 'partner' && path.from === 'anna' && path.to === 'daria')
+
+  expect(layout.unions.third.y).toBeLessThan(layout.nodes.anna.y)
+  expect(third?.d).toContain(`V ${layout.unions.third.y}`)
 })
