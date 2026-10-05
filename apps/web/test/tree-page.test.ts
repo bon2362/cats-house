@@ -40,6 +40,31 @@ it('loads mixed tree by default and writes the selected mode into the URL', asyn
   expect(element.shadowRoot?.querySelector('cats-tree-graph')).not.toBeNull()
 })
 
+it('loads the full family, fits the graph, and stores all mode in the URL', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  history.replaceState({}, '', '/tree?person=anna')
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const stage = element.shadowRoot?.querySelector('.stage') as HTMLElement
+  Object.defineProperties(stage, { clientWidth: { value: 1600 }, clientHeight: { value: 1000 } })
+
+  const allMode = [...(element.shadowRoot?.querySelectorAll('.modes button') ?? [])].find((button) => button.textContent === 'Вся семья') as HTMLButtonElement | undefined
+  expect(allMode).toBeDefined()
+  allMode?.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await new Promise((resolve) => requestAnimationFrame(resolve))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/tree/anna?mode=all&depth=2')
+  expect(window.location.search).toContain('mode=all')
+  expect(element.shadowRoot?.querySelector('cats-tree-graph')).not.toBeNull()
+  expect(element.shadowRoot?.querySelector('.scene')?.getAttribute('style')).toContain('scale(1.6)')
+  expect([...((element.shadowRoot?.querySelectorAll('.control-right button') ?? []))].filter((button) => button.textContent === '−' || button.textContent === '+').every((button) => (button as HTMLButtonElement).disabled)).toBe(true)
+})
+
 it('shows a recoverable Russian error when graph loading fails', async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: false })
   vi.stubGlobal('fetch', fetchMock)
