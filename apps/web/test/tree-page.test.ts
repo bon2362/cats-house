@@ -81,3 +81,15 @@ it('renders person cards inside the tree graph after loading data', async () => 
   await tree.updateComplete
   expect(tree.shadowRoot?.querySelectorAll('.card').length).toBe(2)
 })
+
+it('places the fitted graph below the workspace controls', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(element.shadowRoot?.querySelector('.scene')?.getAttribute('style')).toContain('translate(0px,160px)')
+})
