@@ -32,6 +32,29 @@ def test_public_search_finds_cyrillic_name_without_login(client, database_sessio
     assert response.json() == [{"id": str(person.id), "display_name": "Анна Иванова"}]
 
 
+def test_public_people_returns_the_catalog_when_query_is_empty(client, database_session):
+    later = add_person(database_session, "Яна Архипова")
+    first = add_person(database_session, "Анна Архипова")
+    add_person(database_session, "Скрытая Архипова", archived=True)
+
+    response = client.get("/api/v1/people")
+
+    assert response.status_code == 200
+    assert response.json() == [
+        {"id": str(first.id), "display_name": "Анна Архипова"},
+        {"id": str(later.id), "display_name": "Яна Архипова"},
+    ]
+
+
+def test_public_search_treats_yo_and_e_as_equivalent(client, database_session):
+    person = add_person(database_session, "Фёдор Архипов")
+
+    response = client.get("/api/v1/people?query=Федор")
+
+    assert response.status_code == 200
+    assert response.json() == [{"id": str(person.id), "display_name": "Фёдор Архипов"}]
+
+
 def test_public_card_returns_person_without_login(client, database_session):
     person = add_person(database_session, "Анна Иванова")
 

@@ -36,7 +36,7 @@ class PersonResponse(PersonSearchResponse):
 
 
 @router.get("/people", response_model=list[PersonSearchResponse])
-def search(query: str = Query(min_length=1), session: Session = Depends(get_session)) -> list[PersonSearchResponse]:
+def search(query: str = Query(default=""), session: Session = Depends(get_session)) -> list[PersonSearchResponse]:
     return [PersonSearchResponse(id=person.id, display_name=person.display_name) for person in search_people(session, query)]
 
 

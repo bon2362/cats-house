@@ -7,12 +7,12 @@ from app.models.genealogy import Event, Media, MediaLink, ParentChild, Person, U
 
 
 def search_people(session: Session, query: str) -> list[Person]:
-    statement = (
-        select(Person)
-        .where(Person.is_archived.is_(False), Person.display_name.ilike(f"%{query.strip()}%"))
-        .order_by(Person.display_name)
-        .limit(20)
-    )
+    normalized_query = query.strip().lower().replace("ё", "е")
+    statement = select(Person).where(Person.is_archived.is_(False))
+    if normalized_query:
+        normalized_name = func.replace(func.lower(Person.display_name), "ё", "е")
+        statement = statement.where(normalized_name.contains(normalized_query))
+    statement = statement.order_by(Person.display_name).limit(500 if not normalized_query else 20)
     return list(session.scalars(statement))
 
 
