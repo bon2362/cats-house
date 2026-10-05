@@ -55,6 +55,7 @@ class ParentChild(Base):
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     parent_id: Mapped[UUID] = mapped_column(ForeignKey("people.id"))
     child_id: Mapped[UUID] = mapped_column(ForeignKey("people.id"))
+    union_id: Mapped[UUID | None] = mapped_column(ForeignKey("unions.id"), nullable=True)
     relationship_type: Mapped[str] = mapped_column(String(32), default="biological")
 
 

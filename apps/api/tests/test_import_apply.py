@@ -30,6 +30,7 @@ def test_apply_preview_creates_people_unions_links_and_events(session):
     assert session.query(Person).count() == 5
     assert session.query(Union).count() == 2
     assert session.query(ParentChild).count() == 4
+    assert session.query(ParentChild).filter(ParentChild.union_id.is_not(None)).count() == 4
     assert session.query(Event).count() == 0
 
 

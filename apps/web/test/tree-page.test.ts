@@ -52,3 +52,20 @@ it('shows a recoverable Russian error when graph loading fails', async () => {
   expect(element.shadowRoot?.textContent).toContain('Не удалось загрузить ветвь')
   expect([...(element.shadowRoot?.querySelectorAll('button') ?? [])].some((button) => button.textContent?.includes('Повторить'))).toBe(true)
 })
+
+it('renders the approved canvas controls and can hide generation bands', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(element.shadowRoot?.querySelector('.stage')).not.toBeNull()
+  const bands = [...(element.shadowRoot?.querySelectorAll('button') ?? [])].find((button) => button.textContent?.includes('Полосы поколений'))
+  expect(bands).toBeDefined()
+  bands?.click()
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  expect((element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement & { showBands: boolean }).showBands).toBe(false)
+})

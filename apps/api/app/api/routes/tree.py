@@ -26,6 +26,7 @@ class TreeLinkResponse(BaseModel):
 
 
 class TreeParentLinkResponse(TreeLinkResponse):
+    union_id: UUID | None
     relationship_type: str
 
 

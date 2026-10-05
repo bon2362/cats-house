@@ -45,7 +45,12 @@ def build_archive(session: Session) -> dict:
             for union in unions
         ],
         "parent_children": [
-            {"parent_archive_id": str(link.parent_id), "child_archive_id": str(link.child_id), "relationship_type": link.relationship_type}
+            {
+                "parent_archive_id": str(link.parent_id),
+                "child_archive_id": str(link.child_id),
+                "union_archive_id": str(link.union_id) if link.union_id else None,
+                "relationship_type": link.relationship_type,
+            }
             for link in parent_children
         ],
         "events": [
@@ -108,7 +113,15 @@ def restore_archive(session: Session, archive: dict) -> None:
         parent = restored_people.get(data.get("parent_archive_id"))
         child = restored_people.get(data.get("child_archive_id"))
         if parent and child:
-            session.add(ParentChild(parent_id=parent.id, child_id=child.id, relationship_type=data["relationship_type"]))
+            union = restored_unions.get(data.get("union_archive_id"))
+            session.add(
+                ParentChild(
+                    parent_id=parent.id,
+                    child_id=child.id,
+                    union_id=union.id if union else None,
+                    relationship_type=data["relationship_type"],
+                )
+            )
 
     restored_events: dict[str, Event] = {}
     for data in archive["events"]:

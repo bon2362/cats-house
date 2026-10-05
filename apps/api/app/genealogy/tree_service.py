@@ -36,6 +36,7 @@ class TreeUnion:
 class TreeParentLink:
     parent_id: UUID
     child_id: UUID
+    union_id: UUID | None
     relationship_type: str
 
 
@@ -155,6 +156,7 @@ def build_tree_graph(
         TreeParentLink(
             parent_id=link.parent_id,
             child_id=link.child_id,
+            union_id=link.union_id,
             relationship_type=link.relationship_type,
         )
         for link in parent_links

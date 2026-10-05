@@ -45,7 +45,9 @@ def test_descendant_tree_returns_union_and_typed_parent_link(client, database_se
     partner = create_person(database_session, run, "Пётр")
     child = create_person(database_session, run, "Мария")
     union = Union(import_run_id=run.id, partner_one_id=root.id, partner_two_id=partner.id, union_type="marriage")
-    database_session.add_all((union, ParentChild(parent_id=root.id, child_id=child.id, relationship_type="biological")))
+    database_session.add(union)
+    database_session.flush()
+    database_session.add(ParentChild(parent_id=root.id, child_id=child.id, relationship_type="biological", union_id=union.id))
     database_session.commit()
 
     response = client.get(f"/api/v1/tree/{root.id}?mode=descendants&depth=1")
@@ -60,7 +62,12 @@ def test_descendant_tree_returns_union_and_typed_parent_link(client, database_se
         }
     ]
     assert response.json()["parent_links"] == [
-        {"parent_id": str(root.id), "child_id": str(child.id), "relationship_type": "biological"}
+        {
+            "parent_id": str(root.id),
+            "child_id": str(child.id),
+            "relationship_type": "biological",
+            "union_id": str(union.id),
+        }
     ]
 
 
@@ -102,7 +109,12 @@ def test_tree_keeps_an_archived_parent_as_a_hidden_placeholder(client, database_
     assert node["is_hidden"] is True
     assert node["display_name"] is None
     assert response.json()["parent_links"] == [
-        {"parent_id": str(archived_parent.id), "child_id": str(child.id), "relationship_type": "biological"}
+        {
+            "parent_id": str(archived_parent.id),
+            "child_id": str(child.id),
+            "union_id": None,
+            "relationship_type": "biological",
+        }
     ]
 
 

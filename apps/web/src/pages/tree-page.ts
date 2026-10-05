@@ -1,193 +1,44 @@
 import { LitElement, css, html } from 'lit'
-
 import './tree-graph'
 import type { LayoutOptions, TreeGraphData, TreePersonData } from './tree-graph'
 
 type TreeMode = 'close' | 'ancestors' | 'descendants' | 'mixed' | 'path'
-
-const modes: { id: TreeMode; label: string }[] = [
-  { id: 'close', label: 'Ближайшие' },
-  { id: 'ancestors', label: 'Предки' },
-  { id: 'descendants', label: 'Потомки' },
-  { id: 'mixed', label: 'Смешанное' },
-  { id: 'path', label: 'Как связаны' },
-]
+const modes: { id: TreeMode; label: string }[] = [{ id: 'close', label: 'Ближайшие' }, { id: 'ancestors', label: 'Предки' }, { id: 'descendants', label: 'Потомки' }, { id: 'mixed', label: 'Смешанное' }, { id: 'path', label: 'Как связаны' }]
 
 export class CatsTreePage extends LitElement {
-  static properties = {
-    rootId: { attribute: false },
-    mode: { state: true },
-    depth: { state: true },
-    direction: { state: true },
-    zoom: { state: true },
-    tree: { state: true },
-    error: { state: true },
-    selectedId: { state: true },
-    relatedTo: { state: true },
-  }
-
-  declare rootId: string | null
-  private declare mode: TreeMode
-  private declare depth: number
-  private declare direction: LayoutOptions['direction']
-  private declare zoom: number
-  private declare tree: TreeGraphData | null
-  private declare error: boolean
-  private declare selectedId: string | null
-  private declare relatedTo: string | null
-
-  constructor() {
-    super()
-    const params = new URLSearchParams(window.location.search)
-    const requestedMode = params.get('mode')
-    this.rootId = null
-    this.mode = isTreeMode(requestedMode) ? requestedMode : 'close'
-    this.depth = clamp(Number(params.get('depth')) || 2, 1, 5)
-    this.direction = params.get('dir') === 'h' ? 'horizontal' : 'vertical'
-    this.zoom = 1
-    this.tree = null
-    this.error = false
-    this.selectedId = null
-    this.relatedTo = params.get('to')
-  }
-
+  static properties = { rootId: { attribute: false }, mode: { state: true }, depth: { state: true }, direction: { state: true }, zoom: { state: true }, panX: { state: true }, panY: { state: true }, tree: { state: true }, error: { state: true }, selectedId: { state: true }, relatedTo: { state: true }, showBands: { state: true }, focusHistory: { state: true } }
+  declare rootId: string | null; private declare mode: TreeMode; private declare depth: number; private declare direction: LayoutOptions['direction']; private declare zoom: number; private declare panX: number; private declare panY: number; private declare tree: TreeGraphData | null; private declare error: boolean; private declare selectedId: string | null; private declare relatedTo: string | null; private declare showBands: boolean; private declare focusHistory: string[]; private drag: { x: number; y: number; panX: number; panY: number } | null = null
+  constructor() { super(); const params = new URLSearchParams(window.location.search); const requestedMode = params.get('mode'); this.rootId = null; this.mode = isTreeMode(requestedMode) ? requestedMode : 'close'; this.depth = clamp(Number(params.get('depth')) || 2, 1, 5); this.direction = params.get('dir') === 'h' ? 'horizontal' : 'vertical'; this.zoom = 1; this.panX = 0; this.panY = 0; this.tree = null; this.error = false; this.selectedId = null; this.relatedTo = params.get('to'); this.showBands = true; this.focusHistory = [] }
   static styles = css`
-    :host { display: block; min-height: calc(100vh - 4.5rem); padding: clamp(1rem, 3vw, 2.5rem); color: var(--cats-ink); }
-    .workspace { display: grid; gap: 1rem; max-width: 96rem; margin: 0 auto; }
-    h1 { margin: 0; font-family: Iowan Old Style, Georgia, serif; font-size: clamp(2rem, 4vw, 3.5rem); font-weight: 400; }
-    .toolbar { display: flex; flex-wrap: wrap; gap: .5rem; align-items: center; border-top: 1px solid var(--cats-line); border-bottom: 1px solid var(--cats-line); padding: .75rem 0; }
-    .toolbar > span { color: var(--cats-muted); font-size: .8rem; margin-left: .5rem; }
-    button { border: 1px solid var(--cats-line); background: transparent; color: var(--cats-ink); padding: .5rem .7rem; font: inherit; font-size: .875rem; cursor: pointer; }
-    button:hover, button:focus-visible { border-color: var(--cats-accent); color: var(--cats-accent); }
-    button[aria-pressed="true"], .primary { background: var(--cats-accent); border-color: var(--cats-accent); color: var(--cats-paper); }
-    .canvas { overflow: auto; min-height: min(68vh, 48rem); background: #f5f4ef; border: 1px solid var(--cats-line); }
-    cats-tree-graph { transform-origin: top left; transition: transform 160ms ease; }
-    .empty, .error, .inspector { border: 1px solid var(--cats-line); background: var(--cats-paper); padding: 1rem; }
-    .error { border-color: #a3402c; color: #7d2b20; }
-    .inspector { display: flex; flex-wrap: wrap; gap: .75rem; align-items: center; }
-    .inspector strong { font-family: Iowan Old Style, Georgia, serif; font-size: 1.25rem; }
-    .hint { color: var(--cats-muted); margin: 0; }
-    @media (max-width: 40rem) { :host { padding: 1rem; } .canvas { min-height: 55vh; } .toolbar > span { width: 100%; margin-left: 0; } }
+    :host { display:block; min-height:calc(100vh - 4.5rem); color:#171817; } .workspace { min-height:calc(100vh - 4.5rem); display:flex; flex-direction:column; } .heading { padding:1.5rem clamp(1rem,3vw,3rem) .75rem; } h1 { margin:0; font:400 clamp(2rem,4vw,3.5rem) Iowan Old Style,Georgia,serif; }
+    .stage { position:relative; flex:1; min-height:42rem; overflow:hidden; touch-action:none; background-color:#fbfbf9; background-image:radial-gradient(#dfe1da 1px,transparent 1px); background-size:16px 16px; border-top:1px solid #d7d8d2; cursor:grab; } .stage.dragging { cursor:grabbing; } .scene { position:absolute; left:0; top:0; transform-origin:0 0; transition:transform 160ms ease; } .stage.dragging .scene { transition:none; }
+    .controls { position:absolute; z-index:2; left:16px; right:16px; top:16px; display:flex; align-items:flex-start; justify-content:space-between; gap:12px; pointer-events:none; } .control-left,.control-right,.modes,.bottom { display:flex; align-items:center; gap:4px; background:#fff; border:1px solid #dcdcd8; border-radius:3px; padding:4px; pointer-events:auto; } .control-left { padding:6px 10px; gap:10px; } .control-right { flex-wrap:wrap; justify-content:flex-end; } .modes { margin-right:auto; } .focus-label { font-size:12px; color:#6b6d69; } .focus-label strong { display:block; color:#171817; font-size:13px; }
+    button { min-height:34px; border:0; background:transparent; color:#171817; padding:0 11px; font:500 13px Inter,system-ui,sans-serif; cursor:pointer; border-radius:2px; } button:hover,button:focus-visible { background:#e4ece7; color:#1b3f31; } button[aria-pressed="true"],.primary { background:#24513f; color:#fff; } button:disabled { opacity:.45; cursor:default; } .counter { min-width:18px; text-align:center; font-size:13px; } .bottom { position:absolute; z-index:2; right:16px; bottom:16px; padding:4px; } .bottom button { min-height:36px; } .percent { min-width:46px; text-align:center; font-size:12px; color:#4a4c49; }
+    .selected { position:absolute; z-index:2; left:16px; bottom:16px; display:flex; align-items:center; gap:10px; padding:8px 10px; background:#fff; border:1px solid #dcdcd8; border-radius:3px; } .selected strong { font:400 18px Iowan Old Style,Georgia,serif; } .error { position:absolute; z-index:3; inset:7rem auto auto 1rem; padding:1rem; background:#fff; border:1px solid #a3402c; color:#7d2b20; } .hint { position:absolute; z-index:2; left:16px; bottom:16px; background:#fff; border:1px solid #dcdcd8; padding:.75rem; } @media(max-width:50rem) { .controls { flex-wrap:wrap; } .modes { order:3; margin-right:0; overflow:auto; max-width:100%; } .control-right { margin-left:auto; } .stage { min-height:34rem; } }
   `
-
-  connectedCallback() {
-    super.connectedCallback()
-    void this.loadTree()
-  }
-
-  updated(changed: Map<string, unknown>) {
-    if (changed.has('rootId') && this.isConnected) void this.loadTree()
-  }
-
-  private async loadTree() {
-    if (!this.rootId || (this.mode === 'path' && !this.relatedTo)) return
-    this.error = false
-    const params = new URLSearchParams({ mode: this.mode, depth: String(this.depth) })
-    if (this.mode === 'path' && this.relatedTo) params.set('to', this.relatedTo)
-    try {
-      const response = await fetch(`/api/v1/tree/${this.rootId}?${params}`)
-      if (!response.ok) throw new Error('Tree request failed')
-      this.tree = await response.json()
-      this.selectedId = this.rootId
-    } catch {
-      this.tree = null
-      this.error = true
-    }
-  }
-
-  private async selectMode(mode: TreeMode) {
-    this.mode = mode
-    if (mode !== 'path') this.relatedTo = null
-    this.syncUrl()
-    await this.loadTree()
-  }
-
-  private async adjustDepth(delta: number) {
-    this.depth = clamp(this.depth + delta, 1, 5)
-    this.syncUrl()
-    await this.loadTree()
-  }
-
-  private setDirection(direction: LayoutOptions['direction']) {
-    this.direction = direction
-    this.syncUrl()
-  }
-
-  private syncUrl() {
-    if (!this.rootId) return
-    const params = new URLSearchParams({ person: this.rootId, mode: this.mode, depth: String(this.depth) })
-    if (this.direction === 'horizontal') params.set('dir', 'h')
-    if (this.mode === 'path' && this.relatedTo) params.set('to', this.relatedTo)
-    history.replaceState({}, '', `/tree?${params}`)
-  }
-
-  private onPersonSelect(event: CustomEvent<{ personId: string }>) {
-    const personId = event.detail.personId
-    if (this.mode === 'path' && personId !== this.rootId) {
-      this.relatedTo = personId
-      this.syncUrl()
-      void this.loadTree()
-      return
-    }
-    this.selectedId = personId
-  }
-
-  private currentPerson(): TreePersonData | null {
-    return this.tree?.people.find((person) => person.id === this.selectedId) ?? null
-  }
-
-  private makeCenter() {
-    const person = this.currentPerson()
-    if (!person || person.is_hidden) return
-    this.rootId = person.id
-    this.selectedId = person.id
-    this.relatedTo = null
-    this.syncUrl()
-    void this.loadTree()
-  }
-
-  render() {
-    if (!this.rootId) return html`<section class="empty"><h1>Семейное дерево</h1><p>Откройте карточку человека и выберите «Открыть дерево».</p></section>`
-    const person = this.currentPerson()
-    const noLinks = this.tree && !this.tree.parent_links.length && !this.tree.unions.length
-    return html`
-      <section class="workspace">
-        <h1>Семейное дерево</h1>
-        <div class="toolbar" aria-label="Управление деревом">
-          ${modes.map(({ id, label }) => html`<button aria-pressed=${String(this.mode === id)} @click=${() => this.selectMode(id)}>${label}</button>`)}
-          <span>Поколений</span>
-          <button aria-label="Уменьшить глубину" ?disabled=${this.depth === 1} @click=${() => this.adjustDepth(-1)}>−</button>
-          <span>${this.depth}</span>
-          <button aria-label="Увеличить глубину" ?disabled=${this.depth === 5} @click=${() => this.adjustDepth(1)}>+</button>
-          <button aria-pressed=${String(this.direction === 'vertical')} @click=${() => this.setDirection('vertical')}>↓ Вниз</button>
-          <button aria-pressed=${String(this.direction === 'horizontal')} @click=${() => this.setDirection('horizontal')}>→ Вправо</button>
-          <button aria-label="Уменьшить масштаб" @click=${() => { this.zoom = Math.max(.5, this.zoom - .1) }}>−</button>
-          <span>${Math.round(this.zoom * 100)}%</span>
-          <button aria-label="Увеличить масштаб" @click=${() => { this.zoom = Math.min(1.6, this.zoom + .1) }}>+</button>
-          <button @click=${() => { this.zoom = 1 }}>Вписать</button>
-        </div>
-        ${this.mode === 'path' && !this.relatedTo ? html`<p class="hint">Выберите второго человека на дереве, чтобы увидеть кратчайшую цепочку родства.</p>` : ''}
-        ${this.error ? html`<div class="error"><p>Не удалось загрузить ветвь. Проверьте соединение и повторите попытку.</p><button class="primary" @click=${this.loadTree}>Повторить</button></div>` : ''}
-        ${noLinks ? html`<div class="empty">У этого человека в архиве нет родственников.</div>` : ''}
-        ${this.tree && !this.error ? html`<div class="canvas"><cats-tree-graph style="transform: scale(${this.zoom})" .graph=${this.tree} .direction=${this.direction} @person-select=${this.onPersonSelect}></cats-tree-graph></div>` : ''}
-        ${person ? html`
-          <aside class="inspector">
-            <strong>${person.is_hidden ? 'Сведения скрыты' : person.display_name}</strong>
-            ${person.birth_label || person.death_label ? html`<span>${[person.birth_label, person.death_label].filter(Boolean).join(' – ')}</span>` : ''}
-            ${!person.is_hidden ? html`<button @click=${this.makeCenter}>Сделать центром</button><a href="/people/${person.id}">Открыть страницу</a>` : ''}
-          </aside>
-        ` : ''}
-      </section>
-    `
-  }
+  connectedCallback() { super.connectedCallback(); void this.loadTree() }
+  updated(changed: Map<string, unknown>) { if (changed.has('rootId') && this.isConnected) void this.loadTree() }
+  private async loadTree() { if (!this.rootId || (this.mode === 'path' && !this.relatedTo)) return; this.error = false; const params = new URLSearchParams({ mode:this.mode, depth:String(this.depth) }); if (this.mode === 'path' && this.relatedTo) params.set('to',this.relatedTo); try { const response = await fetch(`/api/v1/tree/${this.rootId}?${params}`); if (!response.ok) throw new Error(); this.tree = await response.json(); this.selectedId = this.rootId; this.fit() } catch { this.tree=null; this.error=true } }
+  private async selectMode(mode:TreeMode) { this.mode=mode; if(mode!=='path') this.relatedTo=null; this.syncUrl(); await this.loadTree() }
+  private async adjustDepth(delta:number) { this.depth=clamp(this.depth+delta,1,5); this.syncUrl(); await this.loadTree() }
+  private setDirection(direction:LayoutOptions['direction']) { this.direction=direction; this.syncUrl(); this.fit() }
+  private syncUrl() { if(!this.rootId) return; const params=new URLSearchParams({person:this.rootId,mode:this.mode,depth:String(this.depth)}); if(this.direction==='horizontal') params.set('dir','h'); if(this.mode==='path'&&this.relatedTo) params.set('to',this.relatedTo); history.replaceState({},'',`/tree?${params}`) }
+  private onPersonSelect(event:CustomEvent<{personId:string}>) { const id=event.detail.personId; if(this.mode==='path'&&id!==this.rootId) { this.relatedTo=id; this.syncUrl(); void this.loadTree(); return } this.selectedId=id }
+  private currentPerson():TreePersonData|null { return this.tree?.people.find(person=>person.id===this.selectedId)??null }
+  private makeCenter() { const person=this.currentPerson(); if(!person||person.is_hidden||person.id===this.rootId)return; if(this.rootId)this.focusHistory=[...this.focusHistory,this.rootId]; this.rootId=person.id; this.selectedId=person.id; this.relatedTo=null; this.syncUrl(); void this.loadTree() }
+  private goBack() { const previous=this.focusHistory.at(-1); if(!previous)return; this.focusHistory=this.focusHistory.slice(0,-1); this.rootId=previous; this.selectedId=previous; this.syncUrl(); void this.loadTree() }
+  private fit() { this.zoom=.82; this.panX=0; this.panY=24 }
+  private zoomBy(factor:number) { this.zoom=clamp(this.zoom*factor,.3,1.6) }
+  private onWheel(event:WheelEvent) { if(!event.ctrlKey&&!event.metaKey)return; event.preventDefault(); const before=this.zoom; this.zoom=clamp(this.zoom*Math.exp(-event.deltaY*.01),.3,1.6); const rect=(event.currentTarget as HTMLElement).getBoundingClientRect(); const ratio=this.zoom/before; this.panX=event.clientX-rect.left-(event.clientX-rect.left-this.panX)*ratio; this.panY=event.clientY-rect.top-(event.clientY-rect.top-this.panY)*ratio }
+  private pointerDown(event:PointerEvent) { if((event.target as HTMLElement).closest('button,cats-tree-graph,a'))return; this.drag={x:event.clientX,y:event.clientY,panX:this.panX,panY:this.panY}; (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId) }
+  private pointerMove(event:PointerEvent) { if(!this.drag)return; this.panX=this.drag.panX+event.clientX-this.drag.x; this.panY=this.drag.panY+event.clientY-this.drag.y }
+  private pointerUp() { this.drag=null }
+  render() { if(!this.rootId)return html`<section class="workspace"><div class="heading"><h1>Семейное дерево</h1><p>Откройте карточку человека и выберите «Открыть дерево».</p></div></section>`; const person=this.currentPerson(); const noLinks=this.tree&&!this.tree.parent_links.length&&!this.tree.unions.length; return html`<section class="workspace"><div class="heading"><h1>Семейное дерево</h1></div><div class="stage ${this.drag?'dragging':''}" @wheel=${this.onWheel} @pointerdown=${this.pointerDown} @pointermove=${this.pointerMove} @pointerup=${this.pointerUp} @pointercancel=${this.pointerUp}>
+      <div class="controls"><div class="control-left"><button ?disabled=${!this.focusHistory.length} @click=${this.goBack} aria-label="Вернуться к предыдущему центру">←</button><span class="focus-label">В ЦЕНТРЕ<strong>${this.tree?.people.find(p=>p.is_root)?.display_name??'Загрузка…'}</strong></span></div><div class="modes">${modes.map(({id,label})=>html`<button aria-pressed=${String(this.mode===id)} @click=${()=>this.selectMode(id)}>${label}</button>`)}</div><div class="control-right"><span class="focus-label">Поколений</span><button ?disabled=${this.depth===1} @click=${()=>this.adjustDepth(-1)}>−</button><span class="counter">${this.depth}</span><button ?disabled=${this.depth===5} @click=${()=>this.adjustDepth(1)}>+</button><button aria-pressed=${String(this.direction==='vertical')} @click=${()=>this.setDirection('vertical')}>↓ Вниз</button><button aria-pressed=${String(this.direction==='horizontal')} @click=${()=>this.setDirection('horizontal')}>→ Вправо</button><button aria-pressed=${String(this.showBands)} @click=${()=>{this.showBands=!this.showBands}}>Полосы поколений</button></div></div>
+      ${this.error?html`<div class="error"><p>Не удалось загрузить ветвь. Проверьте соединение и повторите попытку.</p><button class="primary" @click=${this.loadTree}>Повторить</button></div>`:''}${noLinks?html`<p class="hint">У этого человека в архиве нет родственников.</p>`:''}${this.mode==='path'&&!this.relatedTo?html`<p class="hint">Выберите второго человека, чтобы увидеть цепочку родства.</p>`:''}
+      ${this.tree&&!this.error?html`<div class="scene" style="transform:translate(${this.panX}px,${this.panY}px) scale(${this.zoom})"><cats-tree-graph .graph=${this.tree} .direction=${this.direction} .selectedId=${this.selectedId} .showBands=${this.showBands} @person-select=${this.onPersonSelect}></cats-tree-graph></div>`:''}
+      <div class="bottom"><button aria-label="Уменьшить масштаб" @click=${()=>this.zoomBy(1/1.2)}>−</button><span class="percent">${Math.round(this.zoom*100)}%</span><button aria-label="Увеличить масштаб" @click=${()=>this.zoomBy(1.2)}>+</button><button @click=${this.fit}>Вписать</button><button @click=${()=>{this.panX=0;this.panY=24}}>К центру</button></div>
+      ${person?html`<aside class="selected"><strong>${person.is_hidden?'Сведения скрыты':person.display_name}</strong>${!person.is_hidden?html`<button @click=${this.makeCenter}>Сделать центром</button><a href="/people/${person.id}">Открыть страницу</a>`:''}</aside>`:''}</div></section>` }
 }
-
-function clamp(value: number, minimum: number, maximum: number) {
-  return Math.min(maximum, Math.max(minimum, value))
-}
-
-function isTreeMode(value: string | null): value is TreeMode {
-  return modes.some((mode) => mode.id === value)
-}
-
-customElements.define('cats-tree-page', CatsTreePage)
+function clamp(value:number,min:number,max:number){return Math.min(max,Math.max(min,value))} function isTreeMode(value:string|null):value is TreeMode{return modes.some(mode=>mode.id===value)}
+customElements.define('cats-tree-page',CatsTreePage)
