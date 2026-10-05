@@ -1,20 +1,23 @@
-from collections import deque
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
-from app.models.genealogy import ParentChild, Person
+from app.genealogy.tree_service import build_tree_graph
 
 router = APIRouter()
 
 
 class TreePersonResponse(BaseModel):
     id: UUID
-    display_name: str
+    display_name: str | None
+    sex: str | None
+    birth_label: str | None
+    death_label: str | None
+    is_hidden: bool
+    is_root: bool
 
 
 class TreeLinkResponse(BaseModel):
@@ -22,8 +25,22 @@ class TreeLinkResponse(BaseModel):
     child_id: UUID
 
 
+class TreeParentLinkResponse(TreeLinkResponse):
+    relationship_type: str
+
+
+class TreeUnionResponse(BaseModel):
+    id: UUID
+    partner_one_id: UUID | None
+    partner_two_id: UUID | None
+    union_type: str | None
+
+
 class TreeResponse(BaseModel):
     people: list[TreePersonResponse]
+    unions: list[TreeUnionResponse]
+    parent_links: list[TreeParentLinkResponse]
+    partner_links: list[TreeUnionResponse]
     links: list[TreeLinkResponse]
 
 
@@ -34,33 +51,13 @@ def get_tree(
     depth: int = Query(default=2, ge=0, le=5),
     session: Session = Depends(get_session),
 ) -> TreeResponse:
-    root = session.scalar(select(Person).where(Person.id == person_id, Person.is_archived.is_(False)))
-    if root is None:
+    graph = build_tree_graph(session, person_id, mode, depth)
+    if graph is None:
         raise HTTPException(status_code=404, detail="Человек не найден.")
-    queue = deque([(root.id, 0)])
-    seen = {root.id}
-    people = [root]
-    while queue:
-        parent_id, level = queue.popleft()
-        if level >= depth:
-            continue
-        related_ids = []
-        if mode in {"descendants", "mixed"}:
-            related_ids.extend(session.scalars(select(ParentChild.child_id).where(ParentChild.parent_id == parent_id)).all())
-        if mode in {"ancestors", "mixed"}:
-            related_ids.extend(session.scalars(select(ParentChild.parent_id).where(ParentChild.child_id == parent_id)).all())
-        related_people = session.scalars(select(Person).where(Person.id.in_(related_ids), Person.is_archived.is_(False))).all()
-        for related in related_people:
-            if related.id not in seen:
-                seen.add(related.id)
-                people.append(related)
-                queue.append((related.id, level + 1))
-    links = session.scalars(
-        select(ParentChild)
-        .where(ParentChild.parent_id.in_(seen), ParentChild.child_id.in_(seen))
-        .order_by(ParentChild.parent_id, ParentChild.child_id)
-    ).all()
     return TreeResponse(
-        people=[TreePersonResponse(id=person.id, display_name=person.display_name) for person in people],
-        links=[TreeLinkResponse(parent_id=link.parent_id, child_id=link.child_id) for link in links],
+        people=[TreePersonResponse(**person.__dict__) for person in graph.people],
+        unions=[TreeUnionResponse(**union.__dict__) for union in graph.unions],
+        parent_links=[TreeParentLinkResponse(**link.__dict__) for link in graph.parent_links],
+        partner_links=[TreeUnionResponse(**union.__dict__) for union in graph.partner_links],
+        links=[TreeLinkResponse(parent_id=link.parent_id, child_id=link.child_id) for link in graph.parent_links],
     )
