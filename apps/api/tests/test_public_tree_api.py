@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models.genealogy import ImportRun, ParentChild, Person, Union
+from app.models.genealogy import ImportRun, Media, MediaLink, ParentChild, Person, Union
 
 
 @pytest.fixture
@@ -62,6 +62,32 @@ def test_all_mode_returns_entire_connected_public_component(client, database_ses
     assert {(union["partner_one_id"], union["partner_two_id"]) for union in body["unions"]} == {
         (str(sibling.id), str(partner.id)),
     }
+
+
+def test_tree_exposes_only_a_published_person_photo(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="p" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    root = create_person(database_session, run, "Анна")
+    child = create_person(database_session, run, "Борис")
+    published = Media(storage_key="media/anna.jpg", media_type="image/jpeg", original_filename="anna.jpg", is_published=True)
+    private = Media(storage_key="media/boris.jpg", media_type="image/jpeg", original_filename="boris.jpg", is_published=False)
+    database_session.add_all((published, private, ParentChild(parent_id=root.id, child_id=child.id)))
+    database_session.flush()
+    database_session.add_all((MediaLink(media_id=published.id, person_id=root.id), MediaLink(media_id=private.id, person_id=child.id)))
+    database_session.commit()
+
+    class FakeStorage:
+        def public_url(self, key: str) -> str:
+            return f"https://media.example.test/{key}"
+
+    client.app.state.media_storage = FakeStorage()
+    response = client.get(f"/api/v1/tree/{root.id}?mode=descendants&depth=1")
+
+    assert response.status_code == 200
+    people = {person["id"]: person for person in response.json()["people"]}
+    assert people[str(root.id)]["photo_url"] == "https://media.example.test/media/anna.jpg"
+    assert people[str(child.id)]["photo_url"] is None
 
 
 def test_descendant_tree_respects_depth(client, database_session):

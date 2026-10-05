@@ -1,10 +1,11 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
+from app.genealogy.read_service import public_person_media
 from app.genealogy.tree_service import TreeRelationPath, build_tree_graph
 
 router = APIRouter()
@@ -18,6 +19,7 @@ class TreePersonResponse(BaseModel):
     death_label: str | None
     is_hidden: bool
     is_root: bool
+    photo_url: str | None = None
 
 
 class TreeLinkResponse(BaseModel):
@@ -55,6 +57,7 @@ class TreeResponse(BaseModel):
 @router.get("/tree/{person_id}", response_model=TreeResponse)
 def get_tree(
     person_id: UUID,
+    request: Request,
     mode: str = Query(pattern="^(close|ancestors|descendants|mixed|path|all)$"),
     depth: int = Query(default=2, ge=1, le=5),
     related_to: UUID | None = Query(default=None, alias="to"),
@@ -67,7 +70,17 @@ def get_tree(
     if graph is None:
         raise HTTPException(status_code=404, detail="Человек не найден.")
     return TreeResponse(
-        people=[TreePersonResponse(**person.__dict__) for person in graph.people],
+        people=[
+            TreePersonResponse(
+                **person.__dict__,
+                photo_url=(
+                    request.app.state.media_storage.public_url(media[0].storage_key)
+                    if not person.is_hidden and (media := public_person_media(session, person.id))
+                    else None
+                ),
+            )
+            for person in graph.people
+        ],
         unions=[TreeUnionResponse(**union.__dict__) for union in graph.unions],
         parent_links=[TreeParentLinkResponse(**link.__dict__) for link in graph.parent_links],
         partner_links=[TreeUnionResponse(**union.__dict__) for union in graph.partner_links],

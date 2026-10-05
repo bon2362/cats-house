@@ -65,6 +65,26 @@ it('loads the full family, fits the graph, and stores all mode in the URL', asyn
   expect([...((element.shadowRoot?.querySelectorAll('.control-right button') ?? []))].filter((button) => button.textContent === '−' || button.textContent === '+').every((button) => (button as HTMLButtonElement).disabled)).toBe(true)
 })
 
+it('finds a person in all-family mode and makes the chosen result the centre', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  ;([...(element.shadowRoot?.querySelectorAll('.modes button') ?? [])].find((button) => button.textContent === 'Вся семья') as HTMLButtonElement | undefined)?.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const search = element.shadowRoot?.querySelector('.tree-search input') as HTMLInputElement
+  expect(search).toBeTruthy()
+  search.value = 'Борис'
+  search.dispatchEvent(new Event('input', { bubbles: true, composed: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  ;([...(element.shadowRoot?.querySelectorAll('.tree-search button') ?? [])].find((button) => button.textContent?.includes('Борис')) as HTMLButtonElement | undefined)?.click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+
+  expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/tree/boris?mode=all&depth=2')
+})
+
 it('shows a recoverable Russian error when graph loading fails', async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: false })
   vi.stubGlobal('fetch', fetchMock)
@@ -234,5 +254,23 @@ it('closes the inspector with Escape and a click on the empty canvas', async () 
   await (element as unknown as { updateComplete: Promise<void> }).updateComplete
   stage.dispatchEvent(new MouseEvent('click', { bubbles: true }))
   await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  expect(element.shadowRoot?.querySelector('.inspector')).toBeNull()
+})
+
+it('closes the inspector when a generation band or relationship line is clicked', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const tree = element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement & { dispatchEvent: (event: Event) => boolean; updateComplete: Promise<void>; shadowRoot: ShadowRoot }
+  tree.dispatchEvent(new CustomEvent('person-select', { detail: { personId: 'boris' }, bubbles: true, composed: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  await tree.updateComplete
+
+  ;(tree.shadowRoot.querySelector('svg') as SVGElement).dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
   expect(element.shadowRoot?.querySelector('.inspector')).toBeNull()
 })
