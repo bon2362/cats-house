@@ -20,7 +20,7 @@ afterEach(() => {
   history.replaceState({}, '', '/')
 })
 
-it('loads close relatives by default and writes the selected mode into the URL', async () => {
+it('loads mixed tree by default and writes the selected mode into the URL', async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
   vi.stubGlobal('fetch', fetchMock)
   history.replaceState({}, '', '/tree?person=anna')
@@ -30,7 +30,7 @@ it('loads close relatives by default and writes the selected mode into the URL',
   await new Promise((resolve) => setTimeout(resolve, 0))
   await (element as unknown as { updateComplete: Promise<void> }).updateComplete
 
-  expect(fetchMock).toHaveBeenCalledWith('/api/v1/tree/anna?mode=close&depth=2')
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/tree/anna?mode=mixed&depth=2')
   const descendants = [...(element.shadowRoot?.querySelectorAll('button') ?? [])].find((button) => button.textContent?.includes('Потомки'))
   descendants?.click()
   await new Promise((resolve) => setTimeout(resolve, 0))

@@ -92,6 +92,28 @@ def test_ancestor_and_mixed_tree_include_parents(client, database_session):
     }
 
 
+def test_mixed_tree_excludes_siblings_and_their_descendants(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="a" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    parent = create_person(database_session, run, "Анна")
+    root = create_person(database_session, run, "Борис")
+    sibling = create_person(database_session, run, "Вера")
+    nephew = create_person(database_session, run, "Глеб")
+    child = create_person(database_session, run, "Дина")
+    database_session.add_all((
+        ParentChild(parent_id=parent.id, child_id=root.id),
+        ParentChild(parent_id=parent.id, child_id=sibling.id),
+        ParentChild(parent_id=sibling.id, child_id=nephew.id),
+        ParentChild(parent_id=root.id, child_id=child.id),
+    ))
+    database_session.commit()
+
+    response = client.get(f"/api/v1/tree/{root.id}?mode=mixed&depth=2")
+
+    assert {person["id"] for person in response.json()["people"]} == {str(parent.id), str(root.id), str(child.id)}
+
+
 def test_tree_keeps_an_archived_parent_as_a_hidden_placeholder(client, database_session):
     run = ImportRun(original_filename="family.ged", sha256="3" * 64, state="applied", normalized_payload={}, counts={})
     database_session.add(run)
