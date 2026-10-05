@@ -83,3 +83,76 @@ def test_ancestor_and_mixed_tree_include_parents(client, database_session):
         (str(parent.id), str(root.id)),
         (str(root.id), str(child.id)),
     }
+
+
+def test_tree_keeps_an_archived_parent_as_a_hidden_placeholder(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="3" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    archived_parent = create_person(database_session, run, "Скрытая Анна")
+    archived_parent.is_archived = True
+    child = create_person(database_session, run, "Борис")
+    database_session.add(ParentChild(parent_id=archived_parent.id, child_id=child.id, relationship_type="biological"))
+    database_session.commit()
+
+    response = client.get(f"/api/v1/tree/{child.id}?mode=ancestors&depth=1")
+
+    assert response.status_code == 200
+    node = next(person for person in response.json()["people"] if person["id"] == str(archived_parent.id))
+    assert node["is_hidden"] is True
+    assert node["display_name"] is None
+    assert response.json()["parent_links"] == [
+        {"parent_id": str(archived_parent.id), "child_id": str(child.id), "relationship_type": "biological"}
+    ]
+
+
+def test_tree_keeps_children_under_their_actual_union(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="4" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    parent = create_person(database_session, run, "Анна")
+    first_partner = create_person(database_session, run, "Пётр")
+    second_partner = create_person(database_session, run, "Сергей")
+    first_child = create_person(database_session, run, "Мария")
+    second_child = create_person(database_session, run, "Вера")
+    first_union = Union(import_run_id=run.id, partner_one_id=parent.id, partner_two_id=first_partner.id, union_type="marriage")
+    second_union = Union(import_run_id=run.id, partner_one_id=parent.id, partner_two_id=second_partner.id, union_type="marriage")
+    database_session.add_all(
+        (
+            first_union,
+            second_union,
+            ParentChild(parent_id=parent.id, child_id=first_child.id, relationship_type="biological"),
+            ParentChild(parent_id=parent.id, child_id=second_child.id, relationship_type="biological"),
+        )
+    )
+    database_session.commit()
+
+    response = client.get(f"/api/v1/tree/{parent.id}?mode=descendants&depth=1")
+
+    assert response.status_code == 200
+    assert {item["id"] for item in response.json()["unions"]} == {str(first_union.id), str(second_union.id)}
+    assert {(item["parent_id"], item["child_id"]) for item in response.json()["parent_links"]} == {
+        (str(parent.id), str(first_child.id)),
+        (str(parent.id), str(second_child.id)),
+    }
+
+
+def test_tree_deduplicates_cycle_without_infinite_traversal(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="5" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    first = create_person(database_session, run, "Анна")
+    second = create_person(database_session, run, "Борис")
+    database_session.add_all(
+        (
+            ParentChild(parent_id=first.id, child_id=second.id, relationship_type="biological"),
+            ParentChild(parent_id=second.id, child_id=first.id, relationship_type="biological"),
+        )
+    )
+    database_session.commit()
+
+    response = client.get(f"/api/v1/tree/{first.id}?mode=mixed&depth=5")
+
+    assert response.status_code == 200
+    assert {person["id"] for person in response.json()["people"]} == {str(first.id), str(second.id)}
+    assert len(response.json()["people"]) == 2

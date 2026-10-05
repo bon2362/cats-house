@@ -69,9 +69,7 @@ def build_tree_graph(
             related_ids.extend(session.scalars(select(ParentChild.child_id).where(ParentChild.parent_id == current_id)).all())
         if mode in {"ancestors", "mixed"}:
             related_ids.extend(session.scalars(select(ParentChild.parent_id).where(ParentChild.child_id == current_id)).all())
-        related_people = session.scalars(
-            select(Person).where(Person.id.in_(related_ids), Person.is_archived.is_(False))
-        ).all()
+        related_people = session.scalars(select(Person).where(Person.id.in_(related_ids))).all()
         for person in related_people:
             if person.id not in people_by_id:
                 people_by_id[person.id] = person
@@ -91,7 +89,7 @@ def build_tree_graph(
         for partner_id in (union.partner_one_id, union.partner_two_id)
         if partner_id is not None
     }
-    for partner in session.scalars(select(Person).where(Person.id.in_(partner_ids), Person.is_archived.is_(False))).all():
+    for partner in session.scalars(select(Person).where(Person.id.in_(partner_ids))).all():
         people_by_id.setdefault(partner.id, partner)
     included_ids = set(people_by_id)
 
@@ -112,11 +110,11 @@ def build_tree_graph(
     people = [
         TreePerson(
             id=person.id,
-            display_name=person.display_name,
-            sex=person.sex,
-            birth_label=life_labels.get(person.id, {}).get("birth"),
-            death_label=life_labels.get(person.id, {}).get("death"),
-            is_hidden=False,
+            display_name=None if person.is_archived else person.display_name,
+            sex=None if person.is_archived else person.sex,
+            birth_label=None if person.is_archived else life_labels.get(person.id, {}).get("birth"),
+            death_label=None if person.is_archived else life_labels.get(person.id, {}).get("death"),
+            is_hidden=person.is_archived,
             is_root=person.id == root.id,
         )
         for person in sorted(people_by_id.values(), key=lambda item: str(item.id))
