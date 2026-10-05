@@ -89,6 +89,7 @@ it('places the fitted graph below the workspace controls', async () => {
   element.rootId = 'anna'
   document.body.append(element)
   await new Promise((resolve) => setTimeout(resolve, 0))
+  await new Promise((resolve) => requestAnimationFrame(resolve))
   await (element as unknown as { updateComplete: Promise<void> }).updateComplete
 
   expect(element.shadowRoot?.querySelector('.scene')?.getAttribute('style')).toContain('translate(0px,160px)')
@@ -126,4 +127,87 @@ it('fits the graph into the available viewport instead of using a fixed percenta
   await (element as unknown as { updateComplete: Promise<void> }).updateComplete
 
   expect(element.shadowRoot?.querySelector('.scene')?.getAttribute('style')).toContain('scale(1.6)')
+})
+
+it('starts canvas dragging from a tree card instead of reserving cards as a dead zone', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const stage = element.shadowRoot?.querySelector('.stage') as HTMLElement
+  const tree = element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement
+  const down = Object.assign(new Event('pointerdown', { bubbles: true, composed: true }), { pointerId: 1, clientX: 20, clientY: 20 })
+  const move = Object.assign(new Event('pointermove', { bubbles: true }), { pointerId: 1, clientX: 40, clientY: 20 })
+  tree.dispatchEvent(down)
+  stage.dispatchEvent(move)
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(stage.classList.contains('dragging')).toBe(true)
+})
+
+it('opens the inspector beside the selected card', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const stage = element.shadowRoot?.querySelector('.stage') as HTMLElement
+  Object.defineProperties(stage, { clientWidth: { value: 800 }, clientHeight: { value: 600 } })
+  const tree = element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement & { shadowRoot: ShadowRoot }
+  const card = tree.shadowRoot.querySelector('.card[aria-label="Борис"]') as SVGElement
+  card.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  const inspector = element.shadowRoot?.querySelector('.inspector') as HTMLElement
+  expect(inspector.style.left).not.toBe('16px')
+  expect(inspector.style.top).toBeTruthy()
+})
+
+it('treats movement over six pixels from a card as a pan without selecting it', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const stage = element.shadowRoot?.querySelector('.stage') as HTMLElement
+  const tree = element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement & { shadowRoot: ShadowRoot }
+  const card = tree.shadowRoot.querySelector('.card[aria-label="Борис"]') as SVGElement
+  const pointer = (type: string, x: number, y: number) => Object.assign(new Event(type, { bubbles: true, composed: true }), { pointerId: 1, clientX: x, clientY: y })
+  card.dispatchEvent(pointer('pointerdown', 20, 20))
+  stage.dispatchEvent(pointer('pointermove', 26, 20))
+  expect(stage.classList.contains('dragging')).toBe(false)
+  stage.dispatchEvent(pointer('pointermove', 27, 20))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  expect(stage.classList.contains('dragging')).toBe(true)
+  stage.dispatchEvent(pointer('pointerup', 27, 20))
+  card.dispatchEvent(new MouseEvent('click', { bubbles: true, composed: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(element.shadowRoot?.querySelector('.inspector')).toBeNull()
+})
+
+it('closes the inspector with Escape and a click on the empty canvas', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const stage = element.shadowRoot?.querySelector('.stage') as HTMLElement
+  const tree = element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement
+  tree.dispatchEvent(new CustomEvent('person-select', { detail: { personId: 'boris' }, bubbles: true, composed: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  stage.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  expect(element.shadowRoot?.querySelector('.inspector')).toBeNull()
+
+  tree.dispatchEvent(new CustomEvent('person-select', { detail: { personId: 'boris' }, bubbles: true, composed: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  stage.dispatchEvent(new MouseEvent('click', { bubbles: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  expect(element.shadowRoot?.querySelector('.inspector')).toBeNull()
 })
