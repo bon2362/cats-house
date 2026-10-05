@@ -2,12 +2,12 @@ import { LitElement, css, html } from 'lit'
 
 import { ru } from './locales/ru'
 import './pages/home-page'
-import type { FeaturedPerson } from './pages/home-page'
+import type { PersonSummary } from './pages/home-page'
 import './pages/person-card'
 import './pages/tree-page'
 
 type ConnectionState = 'loading' | 'ready' | 'unavailable'
-type SearchPerson = { id: string; display_name: string }
+type SearchPerson = PersonSummary
 type PublicPerson = {
   id: string
   display_name: string
@@ -20,184 +20,62 @@ type PublicPerson = {
 }
 
 export class CatsHouseApp extends LitElement {
-  static properties = {
-    connectionState: { state: true },
-    query: { state: true },
-    people: { state: true },
-    person: { state: true },
-    featuredPerson: { state: true },
-  }
-
+  static properties = { connectionState: { state: true }, query: { state: true }, people: { state: true }, cataloguePeople: { state: true }, activeResult: { state: true }, person: { state: true } }
   private declare connectionState: ConnectionState
   private declare query: string
   private declare people: SearchPerson[]
+  private declare cataloguePeople: PersonSummary[]
+  private declare activeResult: number
   private declare person: PublicPerson | null
-  private declare featuredPerson: FeaturedPerson | null
+  private searchTimer: number | undefined
 
   constructor() {
     super()
-    this.connectionState = 'loading'
-    this.query = ''
-    this.people = []
-    this.person = null
-    this.featuredPerson = null
+    this.connectionState = 'loading'; this.query = ''; this.people = []; this.cataloguePeople = []; this.activeResult = -1; this.person = null
   }
 
   static styles = css`
-    :host {
-      display: block;
-      min-height: 100vh;
-      background: var(--cats-paper);
-    }
-
-    header {
-      display: flex;
-      min-height: 4.5rem;
-      align-items: center;
-      justify-content: space-between;
-      border-bottom: 1px solid var(--cats-line);
-      padding: 0 1.5rem;
-    }
-
-    .brand {
-      color: var(--cats-ink);
-      font-family: Iowan Old Style, Palatino Linotype, Book Antiqua, Georgia, serif;
-      font-size: 1.4rem;
-      letter-spacing: -0.04em;
-      text-decoration: none;
-    }
-
-    nav {
-      display: flex;
-      align-items: center;
-      gap: clamp(0.9rem, 3vw, 2rem);
-    }
-
-    a {
-      color: var(--cats-ink);
-      font-size: 0.875rem;
-      text-decoration: none;
-    }
-
-    nav a {
-      position: relative;
-    }
-
-    nav a::after {
-      position: absolute;
-      right: 0;
-      bottom: -0.45rem;
-      left: 0;
-      height: 1px;
-      background: var(--cats-accent);
-      content: '';
-      transform: scaleX(0);
-      transform-origin: right;
-      transition: transform 180ms ease;
-    }
-
-    nav a:hover::after,
-    nav a:focus-visible::after {
-      transform: scaleX(1);
-      transform-origin: left;
-    }
-
-    .sign-in {
-      border: 1px solid var(--cats-accent);
-      border-radius: 999px;
-      color: var(--cats-accent);
-      padding: 0.45rem 0.8rem;
-      transition: background 180ms ease, color 180ms ease;
-    }
-
-    .sign-in:hover,
-    .sign-in:focus-visible {
-      background: var(--cats-accent);
-      color: var(--cats-paper);
-    }
-
-    @media (max-width: 32rem) {
-      header {
-        padding: 0 1rem;
-      }
-
-      .brand {
-        font-size: 1.15rem;
-      }
-
-      nav {
-        gap: 0.75rem;
-      }
-    }
+    :host { display:block; min-height:100vh; background:var(--paper,var(--cats-paper)); }
+    header { display:flex; min-height:4rem; align-items:center; gap:2rem; border-bottom:1px solid var(--border,var(--cats-line)); padding:0 1.875rem; }
+    .brand { flex:none; color:var(--ink,var(--cats-ink)); font-family:var(--font-serif,Georgia,serif); font-size:1.4rem; letter-spacing:-.04em; text-decoration:none; white-space:nowrap; }
+    nav { display:flex; align-self:stretch; align-items:center; gap:1.5rem; }
+    nav a { color:var(--text-2,var(--cats-muted)); font-size:.875rem; font-weight:600; text-decoration:none; }
+    nav a.active { align-self:stretch; border-bottom:2px solid var(--ink,var(--cats-ink)); color:var(--ink,var(--cats-ink)); display:flex; align-items:center; }
+    .header-right { display:flex; align-items:center; gap:1.5rem; margin-left:auto; }
+    .search { position:relative; width:min(23rem,30vw); }
+    input { width:100%; height:2.5rem; border:1px solid var(--border-input,#cfcfca); border-radius:3px; background:var(--sheet,#fff); color:var(--ink,var(--cats-ink)); font:inherit; padding:0 .75rem; }
+    input:focus { border-color:var(--green,var(--cats-accent)); box-shadow:0 0 0 3px var(--green-light,#e4ece7); outline:0; }
+    .search-menu { position:absolute; z-index:20; top:calc(100% + .5rem); left:0; width:min(42rem,calc(100vw - 3rem)); border:1px solid var(--border,#dcdcd8); border-radius:3px; background:var(--sheet,#fff); box-shadow:0 12px 32px rgba(23,24,23,.12); overflow:hidden; }
+    .search-result { display:grid; grid-template-columns:2.5rem 1fr; gap:.75rem; width:100%; border:0; background:transparent; color:inherit; cursor:pointer; padding:.75rem 1rem; text-align:left; text-decoration:none; }
+    .search-result:hover,.search-result.active { background:var(--green-light,#e4ece7); }
+    .monogram { display:grid; width:2.5rem; height:2.5rem; place-items:center; background:var(--subtle,#ececea); color:var(--text-2,#4a4c49); font-size:.75rem; font-weight:700; }
+    .result-name { display:block; color:var(--ink,#171817); font-size:.95rem; font-weight:600; line-height:1.3; }
+    .result-meta { display:block; color:var(--text-3,#6b6d69); font-size:.8rem; line-height:1.35; }
+    .all-results { display:block; border-top:1px solid var(--border,#dcdcd8); color:var(--green,var(--cats-accent)); font-weight:700; padding:.9rem 1rem; text-decoration:none; }
+    .owner-link { color:var(--text-2,var(--cats-muted)); font-size:.8125rem; text-decoration:none; white-space:nowrap; }
+    @media (max-width:45rem) { header { gap:1rem; padding:0 1rem; } .header-right { gap:.75rem; } .search { width:11rem; } .owner-link { display:none; } }
   `
 
-  connectedCallback() {
-    super.connectedCallback()
-    void this.checkPublicApi()
-    void this.loadFeaturedPerson()
-    void this.loadPersonFromPath()
-  }
+  connectedCallback() { super.connectedCallback(); void this.checkPublicApi(); void this.loadCatalogue(); void this.loadPersonFromPath() }
+  disconnectedCallback() { super.disconnectedCallback(); if (this.searchTimer) window.clearTimeout(this.searchTimer) }
 
-  private async loadFeaturedPerson() {
-    try {
-      const response = await fetch('/api/v1/people/featured')
-      this.featuredPerson = response.ok ? await response.json() : null
-    } catch {
-      this.featuredPerson = null
-    }
-  }
+  private async loadCatalogue() { try { const response = await fetch('/api/v1/people'); const data = response.ok ? await response.json() : []; this.cataloguePeople = Array.isArray(data) ? data : [] } catch { this.cataloguePeople = [] } }
+  private async loadPersonFromPath() { const match = window.location.pathname.match(/^\/people\/([^/]+)$/); if (!match) return; const response = await fetch(`/api/v1/people/${match[1]}`); this.person = response.ok ? await response.json() : null }
+  private async checkPublicApi() { try { const response = await fetch('/api/v1/health'); if (!response.ok) throw new Error('Public API is unavailable'); this.connectionState = 'ready' } catch { this.connectionState = 'unavailable' } }
 
-  private async loadPersonFromPath() {
-    const match = window.location.pathname.match(/^\/people\/([^/]+)$/)
-    if (!match) return
-    const response = await fetch(`/api/v1/people/${match[1]}`)
-    this.person = response.ok ? await response.json() : null
-  }
-
-  private async checkPublicApi() {
-    try {
-      const response = await fetch('/api/v1/health')
-      if (!response.ok) {
-        throw new Error('Public API is unavailable')
-      }
-      this.connectionState = 'ready'
-    } catch {
-      this.connectionState = 'unavailable'
-    }
-  }
-
-  private async searchPeople(event: InputEvent) {
-    this.query = (event.target as HTMLInputElement).value
-    if (!this.query.trim()) {
-      this.people = []
-      return
-    }
-    const response = await fetch(`/api/v1/people?query=${encodeURIComponent(this.query)}`)
-    this.people = response.ok ? await response.json() : []
-  }
+  private searchPeople(event: InputEvent) { this.query = (event.target as HTMLInputElement).value; this.people = []; this.activeResult = -1; if (this.searchTimer) window.clearTimeout(this.searchTimer); if (!this.query.trim()) return; this.searchTimer = window.setTimeout(() => void this.requestSearch(), 150) }
+  private async requestSearch() { try { const response = await fetch(`/api/v1/people?query=${encodeURIComponent(this.query)}`); const data = response.ok ? await response.json() : []; this.people = Array.isArray(data) ? data.slice(0, 6) : [] } catch { this.people = [] } }
+  private onSearchKeydown(event: KeyboardEvent) { if (event.key === 'Escape') { this.people = []; this.activeResult = -1; return }; if (!this.people.length) return; if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const direction = event.key === 'ArrowDown' ? 1 : -1; this.activeResult = (this.activeResult + direction + this.people.length) % this.people.length }; if (event.key === 'Enter' && this.activeResult >= 0) window.location.assign(`/people/${this.people[this.activeResult].id}`) }
+  private initials(person: SearchPerson) { return person.display_name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() }
 
   render() {
-    const treeRootId = new URLSearchParams(window.location.search).get('person')
-    const isTreePage = window.location.pathname === '/tree'
-    return html`
-      <header>
-        <a class="brand" href="/">${ru.brand}</a>
-        <nav aria-label="Основная навигация">
-          <a href="/tree">${ru.tree}</a>
-          <a href="/search">${ru.search}</a>
-          <a class="sign-in" href="/login">${ru.signIn}</a>
-        </nav>
-        <section aria-label="Поиск по семье">
-          <input type="search" placeholder="Найти человека" .value=${this.query} @input=${this.searchPeople} />
-          ${this.people.map((person) => html`<a href="/people/${person.id}">${person.display_name}</a>`)}
-        </section>
-      </header>
-      ${isTreePage
-        ? html`<cats-tree-page .rootId=${treeRootId}></cats-tree-page>`
-        : this.person
-        ? html`<cats-person-card .person=${this.person}></cats-person-card>`
-        : html`<cats-house-home .connectionState=${this.connectionState} .featuredPerson=${this.featuredPerson}></cats-house-home>`}
-    `
+    const treeRootId = new URLSearchParams(window.location.search).get('person'); const isTreePage = window.location.pathname === '/tree'
+    return html`<header>
+      <a class="brand" href="/">${ru.brand}</a><nav aria-label="Основная навигация"><a class=${!isTreePage ? 'active' : ''} href="/">Все люди</a>${isTreePage && treeRootId ? html`<a class="active" href="/tree?person=${treeRootId}">Дерево</a>` : ''}</nav>
+      <div class="header-right"><section class="search" aria-label="Поиск по семье"><input type="search" placeholder="Найти человека по имени или фамилии" .value=${this.query} @input=${this.searchPeople} @keydown=${this.onSearchKeydown} />
+        ${this.people.length ? html`<div class="search-menu" role="listbox">${this.people.map((person,index) => html`<a class="search-result ${index === this.activeResult ? 'active' : ''}" href="/people/${person.id}" role="option" aria-selected=${index === this.activeResult}><span class="monogram">${this.initials(person)}</span><span><span class="result-name">${person.display_name}</span><span class="result-meta">${person.years ?? 'годы неизвестны'}${person.parents_label ? ` · родители: ${person.parents_label}` : ''}</span></span></a>`)}<a class="all-results" href="/?q=${encodeURIComponent(this.query)}">Все результаты →</a></div>` : ''}
+      </section><a class="owner-link" href="/login">Вход для владельца</a></div></header>
+      ${isTreePage ? html`<cats-tree-page .rootId=${treeRootId}></cats-tree-page>` : this.person ? html`<cats-person-card .person=${this.person}></cats-person-card>` : html`<cats-house-home .connectionState=${this.connectionState} .people=${this.cataloguePeople}></cats-house-home>`}`
   }
 }
 

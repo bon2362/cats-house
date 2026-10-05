@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import '../src/app-shell'
 import type { CatsHouseApp } from '../src/app-shell'
@@ -17,13 +17,18 @@ describe('cats-house-app', () => {
     vi.restoreAllMocks()
   })
 
-  it('renders the Russian public navigation', async () => {
+  afterEach(() => {
+    vi.useRealTimers()
+    history.pushState({}, '', '/')
+  })
+
+  it('shows the archive navigation without an accent sign-in button', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')))
     const element = await renderApp()
 
-    expect(element.shadowRoot?.textContent).toContain('Дерево')
-    expect(element.shadowRoot?.textContent).toContain('Поиск')
-    expect(element.shadowRoot?.textContent).toContain('Войти')
+    expect(element.shadowRoot?.textContent).toContain("Cat's House")
+    expect(element.shadowRoot?.textContent).toContain('Вход для владельца')
+    expect(element.shadowRoot?.querySelector('.sign-in')).toBeNull()
   })
 
   it('shows a Russian error when the public API is unavailable', async () => {
@@ -37,29 +42,13 @@ describe('cats-house-app', () => {
     expect(homePage?.shadowRoot?.textContent).toContain('Не удалось связаться с сайтом')
   })
 
-  it('shows a featured person and a link to their tree on the home page', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn()
-        .mockResolvedValueOnce(new Response('{}'))
-        .mockResolvedValueOnce(new Response(JSON.stringify({ id: 'person-1', display_name: 'Анна Иванова' }))),
-    )
-    const element = await renderApp()
-    await new Promise((resolve) => setTimeout(resolve, 0))
-    await element.updateComplete
-
-    const homePage = element.shadowRoot?.querySelector<CatsHouseHome>('cats-house-home')
-    await homePage?.updateComplete
-    expect(homePage?.shadowRoot?.textContent).toContain('Анна Иванова')
-    expect(homePage?.shadowRoot?.querySelector('a[href="/tree?person=person-1"]')).not.toBeNull()
-  })
-
-  it('shows people returned by the public search API', async () => {
+  it('shows no more than six results in a separate search panel after input settles', async () => {
+    vi.useFakeTimers()
     vi.stubGlobal(
       'fetch',
       vi.fn((input: RequestInfo | URL) => {
         if (String(input).includes('query=')) {
-          return Promise.resolve(new Response(JSON.stringify([{ id: 'person-1', display_name: 'Анна Иванова' }])))
+          return Promise.resolve(new Response(JSON.stringify(Array.from({ length: 7 }, (_, index) => ({ id: `person-${index}`, display_name: `Анна Иванова ${index}` })))))
         }
         return Promise.resolve(new Response('{}', { status: 404 }))
       }),
@@ -69,10 +58,29 @@ describe('cats-house-app', () => {
 
     search!.value = 'Анна'
     search!.dispatchEvent(new Event('input'))
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await vi.advanceTimersByTimeAsync(150)
     await element.updateComplete
 
-    expect(element.shadowRoot?.textContent).toContain('Анна Иванова')
+    expect(element.shadowRoot?.querySelectorAll('.search-result')).toHaveLength(6)
+    expect(element.shadowRoot?.querySelector('.search-menu')).not.toBeNull()
+    expect(element.shadowRoot?.querySelector('.search-menu')?.textContent).toContain('Все результаты')
+  })
+
+  it('moves through search results with arrows and closes them with Escape', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => Promise.resolve(new Response(String(input).includes('query=') ? JSON.stringify([{ id: 'person-1', display_name: 'Анна Иванова' }]) : '{}'))))
+    const element = await renderApp()
+    const search = element.shadowRoot?.querySelector<HTMLInputElement>('input[type="search"]')
+    search!.value = 'Анна'
+    search!.dispatchEvent(new Event('input'))
+    await vi.advanceTimersByTimeAsync(150)
+    search!.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown' }))
+    await element.updateComplete
+
+    expect(element.shadowRoot?.querySelector('.search-result.active')).not.toBeNull()
+    search!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }))
+    await element.updateComplete
+    expect(element.shadowRoot?.querySelector('.search-menu')).toBeNull()
   })
 
   it('loads a public person card from a person URL', async () => {
