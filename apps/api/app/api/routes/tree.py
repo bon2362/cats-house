@@ -1,7 +1,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
@@ -9,6 +9,13 @@ from app.genealogy.read_service import public_person_media
 from app.genealogy.tree_service import TreeRelationPath, build_tree_graph
 
 router = APIRouter()
+
+
+class TreeRelationshipResponse(BaseModel):
+    label: str
+    kind: str
+    certainty: str
+    reason: str
 
 
 class TreePersonResponse(BaseModel):
@@ -19,6 +26,7 @@ class TreePersonResponse(BaseModel):
     death_label: str | None
     is_hidden: bool
     is_root: bool
+    relationship: TreeRelationshipResponse | None = Field(default=None, exclude_if=lambda value: value is None)
     photo_url: str | None = None
 
 
@@ -72,7 +80,8 @@ def get_tree(
     return TreeResponse(
         people=[
             TreePersonResponse(
-                **person.__dict__,
+                **{key: value for key, value in person.__dict__.items() if key != "relationship"},
+                relationship=(TreeRelationshipResponse(**person.relationship.__dict__) if person.relationship else None),
                 photo_url=(
                     request.app.state.media_storage.public_url(media[0].storage_key)
                     if not person.is_hidden and (media := public_person_media(session, person.id))
