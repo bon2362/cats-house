@@ -16,14 +16,6 @@ export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions &
     const ids = [...block.partnerIds, ...block.childIds]
     for (const id of ids) { const g = graph.generationByPerson[id] ?? 0; row.set(g, [...(row.get(g) ?? []), id]) }
   }
-  for (const item of data.continuations ?? []) {
-    const source = nodes[item.source_person_id]
-    if (!source || continuations.some((continuation) => continuation.sourcePersonId === item.source_person_id)) continue
-    const id = `api:${item.source_person_id}`
-    const endpoint = options.direction === 'vertical' ? { x: source.x + source.width / 2, y: source.y + source.height + 44 } : { x: source.x + source.width + 44, y: source.y + source.height / 2 }
-    continuations.push({ id, blockId: id, ...endpoint, count: item.count, sourcePersonId: item.source_person_id })
-    paths.push(path({ kind: 'card', id: item.source_person_id }, { kind: 'continuation', id }, `M ${source.x + source.width / 2} ${source.y + source.height} V ${endpoint.y}`, 'continuation'))
-  }
   for (const person of displayData.people) { const g = graph.generationByPerson[person.id] ?? 0; row.set(g, [...(row.get(g) ?? []), person.id]) }
   const generations = [...row.keys()].sort((a, b) => a - b); let primary = 72; let extent = 480
   for (const generation of generations) {
@@ -96,6 +88,14 @@ export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions &
         paths.push(path(hub ? { kind: 'union', id: block.id } : { kind: 'card', id: sourcePersonId }, { kind: 'continuation', id }, d, 'continuation'))
       }
     }
+  }
+  for (const item of data.continuations ?? []) {
+    const source = nodes[item.source_person_id]
+    if (!source || continuations.some((continuation) => continuation.sourcePersonId === item.source_person_id)) continue
+    const id = `api:${item.source_person_id}`
+    const endpoint = options.direction === 'vertical' ? { x: source.x + source.width / 2, y: source.y + source.height + 44 } : { x: source.x + source.width + 44, y: source.y + source.height / 2 }
+    continuations.push({ id, blockId: id, ...endpoint, count: item.count, sourcePersonId: item.source_person_id })
+    paths.push(path({ kind: 'card', id: item.source_person_id }, { kind: 'continuation', id }, options.direction === 'vertical' ? `M ${source.x + source.width / 2} ${source.y + source.height} V ${endpoint.y}` : `M ${source.x + source.width} ${source.y + source.height / 2} H ${endpoint.x}`, 'continuation'))
   }
   const width = options.direction === 'vertical' ? extent : primary + 72
   const height = options.direction === 'vertical' ? primary + 72 : extent
