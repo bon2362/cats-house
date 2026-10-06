@@ -1,15 +1,16 @@
 import { LitElement, css, html } from 'lit'
 
 import './person-editor'
-import { addRelative, fetchFamily, findSimilarPeople, searchOwnerPeople, type FamilyOverview, type OwnerSearchResult, type PersonEditPayload, type Relation } from '../owner-api'
+import { addRelative, fetchFamily, findSimilarPeople, replaceParent as replaceParentRequest, searchOwnerPeople, type FamilyOverview, type OwnerSearchResult, type PersonEditPayload, type PersonRef, type Relation } from '../owner-api'
 
 const TITLES: Record<Relation, string> = { child: 'Добавить ребёнка', parent: 'Добавить родителя', spouse: 'Добавить супруга', sibling: 'Добавить брата или сестру' }
 
-/** Owner panel: add a new or existing person as a child, parent, spouse or sibling of `personId`. */
+/** Owner panel: add a new or existing person as a child, parent, spouse or sibling of `personId`, or replace one of its parents. */
 export class CatsRelativeAdder extends LitElement {
-  static properties = { personId: { attribute: false }, relation: { attribute: false }, family: { state: true }, mode: { state: true }, unionId: { state: true }, similar: { state: true }, results: { state: true }, chosen: { state: true }, error: { state: true }, busy: { state: true } }
+  static properties = { personId: { attribute: false }, relation: { attribute: false }, replaceParent: { attribute: false }, family: { state: true }, mode: { state: true }, unionId: { state: true }, similar: { state: true }, results: { state: true }, chosen: { state: true }, error: { state: true }, busy: { state: true } }
   declare personId: string
   declare relation: Relation
+  declare replaceParent: PersonRef | null
   private declare family: FamilyOverview | null
   private declare mode: 'new' | 'existing'
   private declare unionId: string | null
@@ -23,7 +24,7 @@ export class CatsRelativeAdder extends LitElement {
 
   constructor() {
     super()
-    this.personId = ''; this.relation = 'child'; this.family = null; this.mode = 'new'; this.unionId = null
+    this.personId = ''; this.relation = 'child'; this.replaceParent = null; this.family = null; this.mode = 'new'; this.unionId = null
     this.similar = []; this.results = []; this.chosen = null; this.error = ''; this.busy = false
   }
 
@@ -49,7 +50,7 @@ export class CatsRelativeAdder extends LitElement {
   disconnectedCallback() { super.disconnectedCallback(); window.clearTimeout(this.similarTimer) }
 
   willUpdate(changed: Map<string, unknown>) {
-    if (changed.has('relation') && changed.get('relation') !== undefined) this.reset()
+    if ((changed.has('relation') && changed.get('relation') !== undefined) || (changed.has('replaceParent') && changed.get('replaceParent') !== undefined)) this.reset()
   }
 
   /** A new relation starts clean: no chosen person, suggestions or search; the only union preselected for a child. */
@@ -67,7 +68,7 @@ export class CatsRelativeAdder extends LitElement {
   }
 
   private blocked(): string {
-    if (!this.family) return ''
+    if (!this.family || this.replaceParent) return ''
     if (this.relation === 'parent' && !this.family.can_add_parent) return 'У человека уже два родителя.'
     if (this.relation === 'sibling' && !this.family.can_add_sibling) return 'У человека не указаны родители — сначала добавьте родителя.'
     return ''
@@ -78,27 +79,32 @@ export class CatsRelativeAdder extends LitElement {
     this.similarTimer = window.setTimeout(async () => {
       if (!names.given_name.trim() || !(names.surname.trim() || names.birth_surname.trim())) { this.similar = []; return }
       const result = await findSimilarPeople(names)
-      this.similar = result.ok ? result.value.filter((item) => item.id !== this.personId) : []
+      this.similar = result.ok ? result.value.filter((item) => !this.excluded(item)) : []
     }, this.similarDelay)
   }
 
   private async search(query: string) {
     if (!query.trim()) { this.results = []; return }
     const result = await searchOwnerPeople(query)
-    this.results = result.ok ? result.value.filter((item) => item.id !== this.personId) : []
+    this.results = result.ok ? result.value.filter((item) => !this.excluded(item)) : []
   }
+
+  /** The person themself and the parent being replaced are never offered. */
+  private excluded(item: OwnerSearchResult) { return item.id === this.personId || item.id === this.replaceParent?.id }
 
   private choose(item: OwnerSearchResult) { this.chosen = item; this.mode = 'existing' }
 
   private async submit(person: PersonEditPayload | null) {
     if (this.busy) return
     this.busy = true; this.error = ''
-    const result = await addRelative(this.personId, {
-      relation: this.relation, person, existing_id: person ? null : this.chosen?.id ?? null, union_id: this.relation === 'child' ? this.unionId : null,
-    })
+    const existing_id = person ? null : this.chosen?.id ?? null
+    const result = this.replaceParent
+      ? await replaceParentRequest(this.personId, this.replaceParent.id, { person, existing_id })
+      : await addRelative(this.personId, { relation: this.relation, person, existing_id, union_id: this.relation === 'child' ? this.unionId : null })
     this.busy = false
     if (!result.ok) { this.error = result.message; return }
-    this.dispatchEvent(new CustomEvent('relative-added', { detail: result.value, bubbles: true, composed: true }))
+    const detail = this.replaceParent ? { relation: 'parent', created: person !== null, person: result.value.person } : result.value
+    this.dispatchEvent(new CustomEvent('relative-added', { detail, bubbles: true, composed: true }))
   }
 
   private cancel() { this.dispatchEvent(new CustomEvent('adder-cancel', { bubbles: true, composed: true })) }
@@ -108,7 +114,7 @@ export class CatsRelativeAdder extends LitElement {
   }
 
   private otherParent() {
-    if (this.relation !== 'child' || !this.family) return ''
+    if (this.relation !== 'child' || !this.family || this.replaceParent) return ''
     const pick = (value: string | null) => () => { this.unionId = value }
     return html`<fieldset><legend>Второй родитель</legend>
       ${this.family.unions.map((item) => html`<label><input type="radio" name="other-parent" value=${item.union_id} .checked=${this.unionId === item.union_id} @change=${pick(item.union_id)} /> ${item.partner?.display_name ?? 'Партнёр не указан'}</label>`)}
@@ -132,7 +138,7 @@ export class CatsRelativeAdder extends LitElement {
   }
 
   render() {
-    const title = html`<h3>${TITLES[this.relation]}</h3>`
+    const title = html`<h3>${this.replaceParent ? `Заменить родителя: ${this.replaceParent.display_name}` : TITLES[this.relation]}</h3>`
     if (!this.family) return html`${title}${this.error ? html`<p role="alert">${this.error}</p>` : html`<p>Загрузка…</p>`}`
     const blocked = this.blocked()
     if (blocked) return html`${title}<p class="blocked">${blocked}</p><button type="button" @click=${this.cancel}>Отмена</button>`

@@ -42,6 +42,7 @@ class TreeUnion:
     partner_one_id: UUID | None
     partner_two_id: UUID | None
     union_type: str | None
+    divorced: bool = False
 
 
 @dataclass(frozen=True)
@@ -185,8 +186,9 @@ def build_tree_graph(
     kinship_parent_links = [
         KinshipParentLink(link.parent_id, link.child_id, link.relationship_type) for link in resolution_parent_links
     ]
+    divorced_ids = set(session.scalars(select(Event.union_id).where(Event.event_type == "DIV", Event.union_id.is_not(None))))
     kinship_unions = [
-        KinshipUnion(union.partner_one_id, union.partner_two_id)
+        KinshipUnion(union.partner_one_id, union.partner_two_id, divorced=union.id in divorced_ids)
         for union in resolution_unions
         if union.partner_one_id is not None and union.partner_two_id is not None
     ]
@@ -222,6 +224,7 @@ def build_tree_graph(
             partner_one_id=union.partner_one_id,
             partner_two_id=union.partner_two_id,
             union_type=union.union_type,
+            divorced=union.id in divorced_ids,
         )
         for union in included_unions
     ]

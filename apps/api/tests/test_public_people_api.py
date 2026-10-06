@@ -184,3 +184,15 @@ def test_public_search_finds_the_birth_surname_but_never_hidden_people(client, d
     database_session.commit()
 
     assert client.get("/api/v1/people?query=елкина").json() == [{"id": str(visible.id), "display_name": "Анна Иванова"}]
+
+
+def test_person_page_lists_siblings_without_hidden_ones(client, database_session):
+    mother = add_person(database_session, "Анна")
+    child, brother, hidden = add_person(database_session, "Иван"), add_person(database_session, "Пётр"), add_person(database_session, "Скрытый", archived=True)
+    for person in (child, brother, hidden):
+        database_session.add(ParentChild(parent_id=mother.id, child_id=person.id, relationship_type="biological"))
+    database_session.commit()
+
+    body = client.get(f"/api/v1/people/{child.id}").json()
+
+    assert body["siblings"] == [{"id": str(brother.id), "display_name": "Пётр"}]

@@ -19,6 +19,7 @@ def session(postgres_url):
     with Session(engine) as database_session:
         yield database_session
     Base.metadata.drop_all(engine)
+    engine.dispose()
 
 
 def person(session, given, surname=None, birth_surname=None, archived=False):
@@ -56,7 +57,7 @@ def test_family_overview_lists_parents_unions_and_what_can_be_added(session):
     overview = family_overview(session, child.id)
 
     assert sorted(item["display_name"] for item in overview["parents"]) == ["Анна", "Пётр"]
-    assert overview["unions"] == [
+    assert [{"union_id": item["union_id"], "partner": item["partner"]} for item in overview["unions"]] == [
         {"union_id": str(item.id), "partner": {"id": str(wife.id), "display_name": "Мария"} if item is marriage else None}
         for item in sorted([marriage, lonely], key=lambda record: record.id)
     ]

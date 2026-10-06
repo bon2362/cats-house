@@ -37,14 +37,18 @@ def family_overview(session: Session, person_id: UUID) -> dict:
     unions = session.scalars(
         select(Union).where(or_(Union.partner_one_id == person.id, Union.partner_two_id == person.id)).order_by(Union.id)
     ).all()
+    from app.genealogy.family_editing import child_entry, union_details  # family_editing builds on this module
+
     overview_unions = []
     for item in unions:
-        partner_id = item.partner_two_id if item.partner_one_id == person.id else item.partner_one_id
-        partner = session.get(Person, partner_id) if partner_id else None
-        overview_unions.append({"union_id": str(item.id), "partner": _ref(partner) if partner else None})
+        overview_unions.append(union_details(session, item, person.id))
+    without_union = select(ParentChild.child_id).where(ParentChild.parent_id == person.id, ParentChild.union_id.is_(None))
     return {
         "parents": [_ref(parent) for parent in parents],
         "unions": overview_unions,
+        "children_without_union": [
+            child_entry(session, child, person.id) for child in session.scalars(select(Person).where(Person.id.in_(without_union)).order_by(Person.display_name))
+        ],
         "can_add_parent": len(parents) < 2,
         "can_add_sibling": bool(parents),
     }
@@ -194,6 +198,24 @@ def _add_sibling(session: Session, anchor: Person, relative: Person, union_id: U
             _new_link(session, item.parent_id, relative.id, item.union_id, owner_email)
 
 
+def _relative_person(session: Session, anchor: Person, new: PersonEdit | None, existing_id: UUID | None, owner_email: str) -> tuple[Person, bool]:
+    """The chosen existing person, or a new one created (and logged) from the form."""
+    if existing_id is not None:
+        relative = session.get(Person, existing_id)
+        if relative is None:
+            raise LookupError("Выбранный человек не найден.")
+        if relative.id == anchor.id:
+            raise RelativeError("Нельзя связать человека с самим собой.")
+        return relative, False
+    relative = Person(import_run_id=None, source_uid=None, display_name="")
+    session.add(relative)
+    session.flush()
+    _assign(session, relative, new)
+    session.flush()
+    _log(session, "person", relative.id, owner_email, {}, _snapshot(session, relative))
+    return relative, True
+
+
 _RULES = {"spouse": _add_spouse, "child": _add_child, "parent": _add_parent, "sibling": _add_sibling}
 
 
@@ -206,21 +228,7 @@ def add_relative(session: Session, person_id: UUID, relation: str, new: PersonEd
     if anchor is None:
         raise LookupError("Человек не найден.")
     try:
-        if existing_id is not None:
-            relative = session.get(Person, existing_id)
-            if relative is None:
-                raise LookupError("Выбранный человек не найден.")
-            if relative.id == anchor.id:
-                raise RelativeError("Нельзя связать человека с самим собой.")
-            created = False
-        else:
-            relative = Person(import_run_id=None, source_uid=None, display_name="")
-            session.add(relative)
-            session.flush()
-            _assign(session, relative, new)
-            session.flush()
-            _log(session, "person", relative.id, owner_email, {}, _snapshot(session, relative))
-            created = True
+        relative, created = _relative_person(session, anchor, new, existing_id, owner_email)
         _RULES[relation](session, anchor, relative, union_id, owner_email)
         session.commit()
     except Exception:

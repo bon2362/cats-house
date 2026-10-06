@@ -42,7 +42,7 @@ const person = {
 afterEach(() => { document.body.replaceChildren(); vi.unstubAllGlobals() })
 
 it('shows «Изменить» only to the owner and opens the editor in place', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: person.id, display_name: person.display_name, is_archived: false, surname: null, given_name: 'Анна', patronymic: null, birth_surname: null, sex: null, birth: null, death: { status: 'unknown', date: null, date_text: null, place: null } }))))
+  vi.stubGlobal('fetch', ownerApi(JSON.stringify({ id: person.id, display_name: person.display_name, is_archived: false, surname: null, given_name: 'Анна', patronymic: null, birth_surname: null, sex: null, birth: null, death: { status: 'unknown', date: null, date_text: null, place: null } })))
   const card = document.createElement('cats-person-card') as HTMLElement & { person: unknown; isOwner: boolean; updateComplete: Promise<boolean> }
   card.person = person
   document.body.append(card)
@@ -60,7 +60,7 @@ it('shows «Изменить» only to the owner and opens the editor in place',
 
 it('opens the editor directly for the owner on ?edit=1 and reports a save', async () => {
   history.pushState({}, '', `/people/${person.id}?edit=1`)
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: person.id, display_name: person.display_name, is_archived: false, surname: null, given_name: 'Анна', patronymic: null, birth_surname: null, sex: null, birth: null, death: { status: 'unknown', date: null, date_text: null, place: null } }))))
+  vi.stubGlobal('fetch', ownerApi(JSON.stringify({ id: person.id, display_name: person.display_name, is_archived: false, surname: null, given_name: 'Анна', patronymic: null, birth_surname: null, sex: null, birth: null, death: { status: 'unknown', date: null, date_text: null, place: null } })))
   const card = document.createElement('cats-person-card') as HTMLElement & { person: unknown; isOwner: boolean; updateComplete: Promise<boolean> }
   card.person = person
   card.isOwner = true
@@ -90,7 +90,7 @@ it('shows the birth surname by sex', async () => {
 
 it('closes an open editor when the owner signs out', async () => {
   history.pushState({}, '', '/people/p1?edit=1')
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({ id: 'p1', display_name: 'Анна', is_archived: false, surname: null, given_name: 'Анна', patronymic: null, birth_surname: null, sex: null, birth: null, death: { status: 'unknown', date: null, date_text: null, place: null } }))))
+  vi.stubGlobal('fetch', ownerApi(JSON.stringify({ id: 'p1', display_name: 'Анна', is_archived: false, surname: null, given_name: 'Анна', patronymic: null, birth_surname: null, sex: null, birth: null, death: { status: 'unknown', date: null, date_text: null, place: null } })))
   const card = document.createElement('cats-person-card') as HTMLElement & { person: unknown; isOwner: boolean; updateComplete: Promise<boolean> }
   card.person = person
   card.isOwner = true
@@ -160,7 +160,7 @@ it('uses extended life details when the API provides them and omits empty events
 })
 
 it('offers adding relatives only to the owner', async () => {
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')))
+  vi.stubGlobal('fetch', ownerApi('{}'))
   const card = document.createElement('cats-person-card') as HTMLElement & { person: unknown; isOwner: boolean; updateComplete: Promise<boolean> }
   card.person = person
   document.body.append(card)
@@ -172,3 +172,32 @@ it('offers adding relatives only to the owner', async () => {
 
   expect((card.shadowRoot!.querySelector('#family cats-relative-section') as HTMLElement & { personId: string }).personId).toBe('p1')
 })
+
+it('lists siblings instead of the placeholder', async () => {
+  const card = document.createElement('cats-person-card') as HTMLElement & { person: unknown; updateComplete: Promise<boolean> }
+  card.person = { ...person, siblings: [{ id: 's1', display_name: 'Ольга' }] }
+  document.body.append(card)
+  await card.updateComplete
+
+  const column = [...card.shadowRoot!.querySelectorAll('.family-columns > div')].find((item) => item.querySelector('h3')?.textContent === 'Братья и сёстры')!
+  expect(column.querySelector('a')?.getAttribute('href')).toBe('/people/s1')
+  expect(column.textContent).not.toContain('пока не указаны')
+})
+
+it('shows the «Связи» block above «Добавить родственника» for the owner only', async () => {
+  vi.stubGlobal('fetch', ownerApi(JSON.stringify({ parents: [], unions: [], children_without_union: [], can_add_parent: true, can_add_sibling: false })))
+  const card = document.createElement('cats-person-card') as HTMLElement & { person: unknown; isOwner: boolean; updateComplete: Promise<boolean> }
+  card.person = person
+  card.isOwner = true
+  document.body.append(card)
+  await card.updateComplete
+
+  const blocks = [...card.shadowRoot!.querySelectorAll('#family cats-family-editor, #family cats-relative-section')].map((item) => item.tagName.toLowerCase())
+  expect(blocks).toEqual(['cats-family-editor', 'cats-relative-section'])
+})
+
+/** Owner page requests: the family overview for «Связи», everything else gets `body`. */
+function ownerApi(body: string) {
+  const family = JSON.stringify({ parents: [], unions: [], children_without_union: [], can_add_parent: true, can_add_sibling: false })
+  return vi.fn((url: string) => Promise.resolve(new Response(String(url).endsWith('/family') ? family : body)))
+}

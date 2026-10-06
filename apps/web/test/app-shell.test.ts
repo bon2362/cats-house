@@ -220,6 +220,7 @@ describe('cats-house-app', () => {
       const url = String(input)
       if (url.endsWith('/api/v1/auth/status')) return Promise.resolve(new Response(JSON.stringify({ authenticated: true, totp_required: false })))
       if (url.endsWith('/api/v1/people/h1')) return Promise.resolve(new Response('{}', { status: 404 }))
+      if (url.endsWith('/api/v1/admin/people/h1/family')) return Promise.resolve(new Response(JSON.stringify({ parents: [], unions: [], children_without_union: [], can_add_parent: true, can_add_sibling: false })))
       if (url.endsWith('/api/v1/admin/people/h1')) return Promise.resolve(new Response(JSON.stringify({ id: 'h1', display_name: 'Анна', is_archived: true, surname: null, given_name: 'Анна', patronymic: null, birth_surname: null, sex: null, birth: null, death: { status: 'unknown', date: null, date_text: null, place: null } })))
       return Promise.resolve(new Response('[]'))
     }))
@@ -232,6 +233,7 @@ describe('cats-house-app', () => {
     expect(editor.standalone).toBe(true)
     const section = element.shadowRoot!.querySelector('cats-relative-section') as HTMLElement & { personId: string }
     expect(section?.personId).toBe('h1')
+    expect((element.shadowRoot!.querySelector('cats-family-editor') as HTMLElement & { personId: string } | null)?.personId).toBe('h1')
   })
 
   it('does not treat a server error as a hidden person', async () => {

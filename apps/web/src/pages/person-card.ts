@@ -1,5 +1,6 @@
 import { LitElement, css, html, nothing } from 'lit'
 import './person-editor'
+import './family-editor'
 import './relative-section'
 
 type PublicEvent = {
@@ -12,7 +13,7 @@ type PublicEvent = {
 type PublicRelation = { id: string; display_name: string }
 type PublicMedia = { id: string; original_filename: string; url: string }
 type PublicPerson = {
-  id: string; display_name: string; biography: string | null; events: PublicEvent[]; parents: PublicRelation[]; children: PublicRelation[]; partners: PublicRelation[]; media: PublicMedia[]
+  id: string; display_name: string; biography: string | null; events: PublicEvent[]; parents: PublicRelation[]; children: PublicRelation[]; partners: PublicRelation[]; siblings?: PublicRelation[]; media: PublicMedia[]
   birth_label_ru?: string | null; death_label_ru?: string | null
   birth_year?: number | null; death_year?: number | null
   birth_place?: string | null; death_place?: string | null; is_living?: boolean | null
@@ -41,13 +42,17 @@ function eventYear(event: PublicEvent): string { return (event.date_label_ru ?? 
 function initials(name: string): string { return (name.match(/[A-Za-zА-Яа-яЁё]+/g) ?? []).slice(0, 2).map((part) => part[0].toUpperCase()).join('') || '—' }
 
 export class CatsPersonCard extends LitElement {
-  static properties = { person: { attribute: false }, isOwner: { attribute: false }, editing: { state: true }, saved: { state: true } }
+  static properties = { person: { attribute: false }, isOwner: { attribute: false }, editing: { state: true }, saved: { state: true }, familyRevision: { state: true } }
   declare person: PublicPerson
   declare isOwner: boolean
   private declare editing: boolean
   private declare saved: boolean
+  /** Shared by «Связи» and «Добавить родственника»: a change in one makes the other reload or close. */
+  private declare familyRevision: number
 
-  constructor() { super(); this.isOwner = false; this.editing = false; this.saved = false }
+  constructor() { super(); this.isOwner = false; this.editing = false; this.saved = false; this.familyRevision = 0 }
+
+  private bumpFamily = () => { this.familyRevision += 1 }
 
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has('isOwner') && !this.isOwner) this.editing = false
@@ -77,7 +82,7 @@ export class CatsPersonCard extends LitElement {
     const person = this.person
     const events = [...(person.events ?? [])].filter((event) => this.hasVisibleDetail(event)).sort((a, b) => this.eventSortKey(a).localeCompare(this.eventSortKey(b)))
     const life = this.lifeLine(person, events)
-    return html`<div class="page"><nav class="contents" aria-label="Разделы страницы человека"><a href="/">← Все люди</a><a href="#family">Семья</a><a href="#timeline">Хронология</a><a href="#biography">Биография</a><a href="#media">Фото и документы</a></nav><main>${this.editing ? html`<cats-person-editor .personId=${person.id} @person-saved=${this.onSaved} @editor-cancel=${() => { this.editing = false }} @person-visibility-changed=${this.onSaved}></cats-person-editor>` : html`<header class="hero"><div class="monogram" aria-label="Монограмма">${initials(person.display_name)}</div><div><p class="eyebrow">Профиль человека</p><h1>${person.display_name}</h1>${person.birth_surname ? html`<p class="life">${person.sex === 'F' ? 'урождённая' : person.sex === 'M' ? 'урождённый' : 'при рождении'} ${person.birth_surname}</p>` : nothing}${life ? html`<p class="life">${life}</p>` : html`<p class="life">Годы жизни в архиве не указаны</p>`}${person.biography ? html`<p class="bio">${person.biography}</p>` : nothing}<div class="actions">${this.isOwner ? html`<button class="button" @click=${() => { this.editing = true; this.saved = false }}>Изменить</button>` : nothing}${this.saved ? html`<span class="saved" role="status">Сохранено</span>` : nothing}<a class="button primary" href="/tree?person=${person.id}">Построить дерево</a><a class="button" href="${window.location.href}">Скопировать ссылку</a></div></div></header>`}<section id="family"><p class="section-kicker">Связи в архиве</p><h2>Семья</h2>${this.renderFamilyMap()}<div class="family-columns"><div><h3>Родители</h3>${this.renderRelationList(person.parents,'Родители в архиве не указаны')}</div><div><h3>Союзы и дети</h3>${this.renderUnions()}</div><div><h3>Братья и сёстры</h3><p class="empty">Братья и сёстры в архиве пока не указаны</p></div></div>${this.isOwner ? html`<cats-relative-section .personId=${person.id}></cats-relative-section>` : nothing}</section><section id="timeline"><p class="section-kicker">По датам</p><h2>Хронология</h2>${events.length ? html`<div class="timeline">${events.map((event) => this.renderEvent(event))}</div>` : html`<p class="empty">Хронология пока не заполнена</p>`}</section><section id="biography"><p class="section-kicker">Личная история</p><h2>Биография</h2>${person.biography ? html`<p class="bio">${person.biography}</p>` : html`<p class="empty">Биография пока не написана</p>`}</section><section id="media"><p class="section-kicker">Архив</p><h2>Фото и документы</h2>${(person.media ?? []).length ? html`<div class="media">${person.media.map((item) => html`<a href="${item.url}" target="_blank" rel="noopener">${item.original_filename}</a>`)}</div>` : html`<p class="empty">Фото и документы пока не добавлены</p>`}</section></main></div>`
+    return html`<div class="page"><nav class="contents" aria-label="Разделы страницы человека"><a href="/">← Все люди</a><a href="#family">Семья</a><a href="#timeline">Хронология</a><a href="#biography">Биография</a><a href="#media">Фото и документы</a></nav><main>${this.editing ? html`<cats-person-editor .personId=${person.id} @person-saved=${this.onSaved} @editor-cancel=${() => { this.editing = false }} @person-visibility-changed=${this.onSaved}></cats-person-editor>` : html`<header class="hero"><div class="monogram" aria-label="Монограмма">${initials(person.display_name)}</div><div><p class="eyebrow">Профиль человека</p><h1>${person.display_name}</h1>${person.birth_surname ? html`<p class="life">${person.sex === 'F' ? 'урождённая' : person.sex === 'M' ? 'урождённый' : 'при рождении'} ${person.birth_surname}</p>` : nothing}${life ? html`<p class="life">${life}</p>` : html`<p class="life">Годы жизни в архиве не указаны</p>`}${person.biography ? html`<p class="bio">${person.biography}</p>` : nothing}<div class="actions">${this.isOwner ? html`<button class="button" @click=${() => { this.editing = true; this.saved = false }}>Изменить</button>` : nothing}${this.saved ? html`<span class="saved" role="status">Сохранено</span>` : nothing}<a class="button primary" href="/tree?person=${person.id}">Построить дерево</a><a class="button" href="${window.location.href}">Скопировать ссылку</a></div></div></header>`}<section id="family"><p class="section-kicker">Связи в архиве</p><h2>Семья</h2>${this.renderFamilyMap()}<div class="family-columns"><div><h3>Родители</h3>${this.renderRelationList(person.parents,'Родители в архиве не указаны')}</div><div><h3>Союзы и дети</h3>${this.renderUnions()}</div><div><h3>Братья и сёстры</h3>${this.renderRelationList(person.siblings ?? [], 'Братья и сёстры в архиве пока не указаны')}</div></div>${this.isOwner ? html`<cats-family-editor .personId=${person.id} .revision=${this.familyRevision} @person-changed=${this.bumpFamily}></cats-family-editor><cats-relative-section .personId=${person.id} .revision=${this.familyRevision} @person-changed=${this.bumpFamily}></cats-relative-section>` : nothing}</section><section id="timeline"><p class="section-kicker">По датам</p><h2>Хронология</h2>${events.length ? html`<div class="timeline">${events.map((event) => this.renderEvent(event))}</div>` : html`<p class="empty">Хронология пока не заполнена</p>`}</section><section id="biography"><p class="section-kicker">Личная история</p><h2>Биография</h2>${person.biography ? html`<p class="bio">${person.biography}</p>` : html`<p class="empty">Биография пока не написана</p>`}</section><section id="media"><p class="section-kicker">Архив</p><h2>Фото и документы</h2>${(person.media ?? []).length ? html`<div class="media">${person.media.map((item) => html`<a href="${item.url}" target="_blank" rel="noopener">${item.original_filename}</a>`)}</div>` : html`<p class="empty">Фото и документы пока не добавлены</p>`}</section></main></div>`
   }
 
   private lifeLine(person: PublicPerson, events: PublicEvent[]) {

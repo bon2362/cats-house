@@ -7,7 +7,8 @@ type Adder = HTMLElement & { personId: string; relation: Relation; similarDelay:
 const settle = async (element: Adder) => { for (let index = 0; index < 3; index += 1) { await new Promise((resolve) => setTimeout(resolve, 0)); await element.updateComplete } }
 const FAMILY: FamilyOverview = {
   parents: [{ id: 'mom', display_name: 'Анна' }],
-  unions: [{ union_id: 'u1', partner: { id: 'wife', display_name: 'Мария' } }],
+  unions: [{ union_id: 'u1', partner: { id: 'wife', display_name: 'Мария' }, marriage: null, divorce: null, children: [] }],
+  children_without_union: [],
   can_add_parent: true, can_add_sibling: true,
 }
 const ADDED = { relation: 'child', created: true, person: { id: 'new', display_name: 'Иван Петров' } }
@@ -142,5 +143,34 @@ describe('cats-relative-adder', () => {
     button(adder, 'Отмена')!.click()
 
     expect(cancelled).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('cats-relative-adder replacing a parent', () => {
+  it('replaces the chosen parent with a new person', async () => {
+    const fetchMock = vi.fn((url: string, init?: RequestInit) => {
+      if (url.endsWith('/family')) return Promise.resolve(new Response(JSON.stringify({ ...FAMILY, can_add_parent: false })))
+      if (url.endsWith('/parents/alex/replace')) return Promise.resolve(new Response(JSON.stringify({ person: { id: 'viktor', display_name: 'Виктор' } })))
+      return Promise.resolve(new Response('[]'))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const adder = document.createElement('cats-relative-adder') as Adder & { replaceParent: { id: string; display_name: string } | null }
+    adder.personId = 'katya'
+    adder.relation = 'parent'
+    adder.replaceParent = { id: 'alex', display_name: 'Александр' }
+    adder.similarDelay = 0
+    document.body.append(adder)
+    await settle(adder)
+    const added = vi.fn()
+    adder.addEventListener('relative-added', added)
+
+    expect(root(adder).querySelector('h3')?.textContent).toBe('Заменить родителя: Александр')
+    expect(root(adder).querySelector('.blocked')).toBeNull()
+    editor(adder).dispatchEvent(new CustomEvent('person-draft', { detail: DRAFT, bubbles: true, composed: true }))
+    await settle(adder)
+
+    const [, init] = fetchMock.mock.calls.find(([url]) => String(url).endsWith('/replace'))!
+    expect(JSON.parse(String(init!.body))).toEqual({ person: DRAFT, existing_id: null })
+    expect(added).toHaveBeenCalledWith(expect.objectContaining({ detail: { relation: 'parent', created: true, person: { id: 'viktor', display_name: 'Виктор' } } }))
   })
 })

@@ -216,3 +216,89 @@ def test_relative_refusals_are_russian_422_and_missing_people_404(client, databa
     assert (both.status_code, both.json()) == (422, {"detail": "Выберите нового или существующего человека."})
     assert (missing.status_code, missing.json()) == (404, {"detail": "Выбранный человек не найден."})
     assert unknown_anchor.status_code == 404
+
+
+def _family(database_session):
+    mother = create_person(database_session)
+    father = create_related_person(database_session, mother.import_run_id, "Пётр")
+    child = create_related_person(database_session, mother.import_run_id, "Мария")
+    marriage = Union(import_run_id=mother.import_run_id, partner_one_id=mother.id, partner_two_id=father.id, union_type="marriage")
+    database_session.add(marriage)
+    database_session.flush()
+    database_session.add_all([
+        ParentChild(parent_id=mother.id, child_id=child.id, union_id=marriage.id, relationship_type="biological"),
+        ParentChild(parent_id=father.id, child_id=child.id, union_id=marriage.id, relationship_type="biological"),
+    ])
+    database_session.commit()
+    return mother, father, child, marriage
+
+
+def test_guests_cannot_edit_links_or_unions(client, database_session):
+    mother, father, child, marriage = _family(database_session)
+
+    assert client.post(f"/api/v1/admin/people/{child.id}/parents/{father.id}/replace", json={"person": FORM}).status_code == 401
+    assert client.request("DELETE", f"/api/v1/admin/people/{child.id}/parents/{father.id}").status_code == 401
+    assert client.post(f"/api/v1/admin/people/{mother.id}/children/{child.id}/move", json={"union_id": None}).status_code == 401
+    assert client.patch(f"/api/v1/admin/unions/{marriage.id}", json={"marriage": None, "divorced": True, "divorce_date": None}).status_code == 401
+    assert client.request("DELETE", f"/api/v1/admin/unions/{marriage.id}").status_code == 401
+
+
+def test_owner_replaces_a_parent_marks_a_divorce_and_sees_it_in_the_family(client, database_session):
+    mother, father, child, marriage = _family(database_session)
+    login(client)
+
+    replaced = client.post(f"/api/v1/admin/people/{child.id}/parents/{father.id}/replace", json={"person": FORM, "existing_id": None})
+    divorce = client.patch(f"/api/v1/admin/unions/{marriage.id}", json={"marriage": None, "divorced": True, "divorce_date": {"qualifier": "exact", "year": 1990, "month": None, "day": None, "end": None}})
+
+    assert replaced.status_code == 200 and replaced.json()["person"]["display_name"] == "Анна Иванова"
+    assert divorce.status_code == 200 and divorce.json()["divorce"]["date_text"] == "1990"
+    family = client.get(f"/api/v1/admin/people/{mother.id}/family").json()
+    by_partner = {item["partner"]["display_name"]: item for item in family["unions"]}
+    assert by_partner["Пётр"]["divorce"]["date_text"] == "1990" and by_partner["Пётр"]["children"] == []
+    assert [item["display_name"] for item in by_partner["Анна Иванова"]["children"]] == ["Мария"]
+
+
+def test_owner_removes_and_moves_links_and_removes_an_empty_union(client, database_session):
+    mother, father, child, marriage = _family(database_session)
+    login(client)
+
+    assert client.post(f"/api/v1/admin/people/{mother.id}/children/{child.id}/move", json={"union_id": None}).status_code == 204
+    assert client.request("DELETE", f"/api/v1/admin/unions/{marriage.id}").status_code == 204
+    assert client.request("DELETE", f"/api/v1/admin/people/{child.id}/parents/{mother.id}").status_code == 204
+    assert database_session.query(ParentChild).filter_by(child_id=child.id).count() == 0
+
+
+def test_link_refusals_are_russian_and_missing_unions_404(client, database_session):
+    from uuid import uuid4
+
+    mother, father, child, marriage = _family(database_session)
+    login(client)
+
+    full = client.request("DELETE", f"/api/v1/admin/unions/{marriage.id}")
+    not_parent = client.request("DELETE", f"/api/v1/admin/people/{child.id}/parents/{child.id}")
+
+    assert (full.status_code, full.json()) == (422, {"detail": "В союзе есть дети — сначала перенесите или уберите их."})
+    assert (not_parent.status_code, not_parent.json()) == (422, {"detail": "Этот человек не записан родителем."})
+    assert client.patch(f"/api/v1/admin/unions/{uuid4()}", json={"marriage": None, "divorced": False, "divorce_date": None}).status_code == 404
+
+
+def test_union_edit_keeps_an_unparsed_marriage_date_on_request(client, database_session):
+    mother, father, child, marriage = _family(database_session)
+    database_session.add(Event(union_id=marriage.id, event_type="MARR", date_text="весной 1975"))
+    database_session.commit()
+    login(client)
+
+    response = client.patch(f"/api/v1/admin/unions/{marriage.id}", json={"marriage": {"date": None, "place": None, "date_text_keep": True}, "divorced": True, "divorce_date": None})
+
+    assert response.status_code == 200 and response.json()["marriage"]["date_text"] == "весной 1975"
+
+
+def test_union_edit_keeps_an_unparsed_divorce_date_on_request(client, database_session):
+    mother, father, child, marriage = _family(database_session)
+    database_session.add(Event(union_id=marriage.id, event_type="DIV", date_text="после войны"))
+    database_session.commit()
+    login(client)
+
+    response = client.patch(f"/api/v1/admin/unions/{marriage.id}", json={"marriage": None, "divorced": True, "divorce_date": None, "divorce_date_text_keep": True})
+
+    assert response.status_code == 200 and response.json()["divorce"]["date_text"] == "после войны"

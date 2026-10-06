@@ -398,3 +398,18 @@ it('marks a death date as such when the birth date is unknown', async () => {
   expect(date('parent')).toBe('? – 20 MAR 2004')
   expect(date('child')).toBe('1901')
 })
+
+it('draws a divorced union with a dashed partner line', async () => {
+  await import('../src/pages/tree-graph')
+  const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData }
+  graph.graph = {
+    ...familyGraph,
+    people: familyGraph.people.slice(0, 2),
+    unions: [{ id: 'pair', partner_one_id: 'parent', partner_two_id: 'child', union_type: 'marriage', divorced: true }],
+    parent_links: [],
+  }
+  document.body.append(graph)
+  await (graph as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(graph.shadowRoot?.querySelector('path.partner')?.classList.contains('divorced')).toBe(true)
+})

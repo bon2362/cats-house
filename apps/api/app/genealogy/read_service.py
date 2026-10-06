@@ -121,6 +121,17 @@ def public_family(session: Session, person_id: UUID) -> tuple[list[Person], list
     return parents, children, partners
 
 
+def public_siblings(session: Session, person_id: UUID) -> list[Person]:
+    """Visible people sharing at least one parent with ``person_id``."""
+    parent_ids = select(ParentChild.parent_id).where(ParentChild.child_id == person_id)
+    sibling_ids = select(ParentChild.child_id).where(ParentChild.parent_id.in_(parent_ids), ParentChild.child_id != person_id)
+    return list(
+        session.scalars(
+            select(Person).where(Person.id.in_(sibling_ids), Person.is_archived.is_(False)).order_by(Person.display_name)
+        )
+    )
+
+
 def public_person_media(session: Session, person_id: UUID) -> list[Media]:
     return list(
         session.scalars(

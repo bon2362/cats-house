@@ -7,12 +7,14 @@ const CHOICES: [Relation, string][] = [['child', 'Ребёнка'], ['parent', '
 
 /** Owner block «Добавить родственника»: relation buttons, the adder panel and the «Добавлено» status. */
 export class CatsRelativeSection extends LitElement {
-  static properties = { personId: { attribute: false }, adding: { state: true }, added: { state: true } }
+  static properties = { personId: { attribute: false }, revision: { attribute: false }, adding: { state: true }, added: { state: true } }
   declare personId: string
+  /** Bumped by the page after a change elsewhere: an open panel would show stale family data, so it closes. */
+  declare revision: number
   private declare adding: Relation | null
   private declare added: { id: string; display_name: string } | null
 
-  constructor() { super(); this.personId = ''; this.adding = null; this.added = null }
+  constructor() { super(); this.personId = ''; this.revision = 0; this.adding = null; this.added = null }
 
   static styles = css`
     :host { display:block; margin-top:32px; }
@@ -25,6 +27,7 @@ export class CatsRelativeSection extends LitElement {
 
   willUpdate(changed: Map<string, unknown>) {
     if (changed.has('personId') && changed.get('personId') !== undefined) { this.adding = null; this.added = null }
+    if (changed.has('revision') && changed.get('revision') !== undefined) this.adding = null
   }
 
   private onAdded = (event: CustomEvent<{ person: { id: string; display_name: string } }>) => {

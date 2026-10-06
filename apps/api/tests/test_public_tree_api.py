@@ -190,6 +190,7 @@ def test_descendant_tree_returns_union_and_typed_parent_link(client, database_se
             "partner_one_id": str(root.id),
             "partner_two_id": str(partner.id),
             "union_type": "marriage",
+            "divorced": False,
         }
     ]
     assert response.json()["parent_links"] == [
@@ -423,3 +424,28 @@ def test_tree_labels_are_russian_for_approximate_dates(client, database_session)
     people = client.get(f"/api/v1/tree/{person.id}?mode=close").json()["people"]
 
     assert next(item for item in people if item["id"] == str(person.id))["birth_label"] == "ок. 1900"
+
+
+def test_tree_marks_divorced_unions_and_names_the_former_and_step_relatives(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="0" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    katya, natalia = create_person(database_session, run, "Катя", "F"), create_person(database_session, run, "Наталья", "F")
+    viktor, alexander = create_person(database_session, run, "Виктор", "M"), create_person(database_session, run, "Александр", "M")
+    first = Union(import_run_id=run.id, partner_one_id=natalia.id, partner_two_id=viktor.id, union_type="marriage")
+    second = Union(import_run_id=run.id, partner_one_id=natalia.id, partner_two_id=alexander.id, union_type="marriage")
+    database_session.add_all([first, second])
+    database_session.flush()
+    database_session.add_all([
+        ParentChild(parent_id=natalia.id, child_id=katya.id, union_id=first.id, relationship_type="biological"),
+        ParentChild(parent_id=viktor.id, child_id=katya.id, union_id=first.id, relationship_type="biological"),
+        Event(union_id=first.id, event_type="DIV"),
+    ])
+    database_session.commit()
+
+    body = client.get(f"/api/v1/tree/{katya.id}?mode=all").json()
+
+    divorced = {item["id"]: item["divorced"] for item in body["unions"]}
+    assert divorced == {str(first.id): True, str(second.id): False}
+    labels = {item["display_name"]: (item.get("relationship") or {}).get("label") for item in body["people"]}
+    assert labels["Александр"] == "отчим" and labels["Виктор"] == "отец"

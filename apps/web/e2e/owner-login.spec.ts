@@ -57,3 +57,18 @@ test('the owner opens «Добавить ребёнка» for a real person and 
   await page.locator('cats-relative-adder').getByRole('button', { name: 'Отмена' }).first().click()
   await expect(page.getByRole('heading', { name: 'Добавить ребёнка' })).toHaveCount(0)
 })
+
+test('the owner opens the union editor for a real marriage and cancels', async ({ page }) => {
+  test.skip(!password, 'Set CATS_HOUSE_E2E_OWNER_PASSWORD to run the union editor check.')
+  await page.goto('/login?next=%2Fpeople%2Fca7750a8-ecfe-4cf4-a58c-9e9806656913')
+  await page.getByLabel('Пароль').fill(password!)
+  await page.getByRole('button', { name: 'Войти' }).click()
+  await expect(page).toHaveURL(/\/people\/ca7750a8/)
+
+  const block = page.locator('cats-family-editor')
+  await expect(block.getByRole('heading', { name: 'Связи' })).toBeVisible()
+  await block.getByRole('button', { name: 'Изменить' }).first().click()
+  await expect(block.getByText('В разводе')).toBeVisible()
+  await block.getByRole('button', { name: 'Отмена' }).first().click()
+  await expect(block.getByText('В разводе')).toHaveCount(0)
+})

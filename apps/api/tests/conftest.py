@@ -77,3 +77,4 @@ def client(settings):
 
     yield ApiClient()
     Base.metadata.drop_all(engine)
+    engine.dispose()

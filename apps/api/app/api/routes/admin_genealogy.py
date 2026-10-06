@@ -9,6 +9,7 @@ from app.api.dependencies import OwnerSession, require_owner
 from app.db.session import get_session
 from app.genealogy.dates import DateError, DatePoint, DateValue
 from app.genealogy.person_editing import LifeEventInput, PersonEdit, PersonEditError, editable_person, owner_search, update_person
+from app.genealogy.family_editing import move_child, remove_parent, remove_union, replace_parent, update_union
 from app.genealogy.relatives import add_relative, family_overview, find_similar
 from app.genealogy.write_service import archive_person, create_parent_child_link, create_person_event, create_union, restore_person
 
@@ -206,3 +207,60 @@ def create_parent_link(
     except ValueError as error:
         raise HTTPException(status_code=422, detail=str(error)) from error
     return ParentChildCreateResponse(id=link.id)
+
+
+class ReplaceBody(BaseModel):
+    person: PersonEditBody | None = None
+    existing_id: UUID | None = None
+
+
+class MoveBody(BaseModel):
+    union_id: UUID | None = None
+
+
+class MarriageBody(BaseModel):
+    date: DateBody | None = None
+    place: str | None = None
+    date_text_keep: bool = False
+
+
+class UnionEditBody(BaseModel):
+    marriage: MarriageBody | None = None
+    divorced: bool = False
+    divorce_date: DateBody | None = None
+    divorce_date_text_keep: bool = False
+
+
+def _owner_errors(call):
+    try:
+        return call()
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (PersonEditError, DateError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/admin/people/{child_id}/parents/{parent_id}/replace")
+def replace_person_parent(child_id: UUID, parent_id: UUID, body: ReplaceBody, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
+    return _owner_errors(lambda: replace_parent(session, child_id, parent_id, _edit(body.person) if body.person else None, body.existing_id, owner.email))
+
+
+@router.delete("/admin/people/{child_id}/parents/{parent_id}", status_code=204)
+def remove_person_parent(child_id: UUID, parent_id: UUID, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> None:
+    _owner_errors(lambda: remove_parent(session, child_id, parent_id, owner.email))
+
+
+@router.post("/admin/people/{parent_id}/children/{child_id}/move", status_code=204)
+def move_person_child(parent_id: UUID, child_id: UUID, body: MoveBody, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> None:
+    _owner_errors(lambda: move_child(session, parent_id, child_id, body.union_id, owner.email))
+
+
+@router.patch("/admin/unions/{union_id}")
+def edit_union(union_id: UUID, body: UnionEditBody, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
+    marriage = LifeEventInput(_date(body.marriage.date), body.marriage.place, body.marriage.date_text_keep) if body.marriage else None
+    return _owner_errors(lambda: update_union(session, union_id, marriage, body.divorced, _date(body.divorce_date), owner.email, body.divorce_date_text_keep))
+
+
+@router.delete("/admin/unions/{union_id}", status_code=204)
+def delete_union(union_id: UUID, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> None:
+    _owner_errors(lambda: remove_union(session, union_id, owner.email))

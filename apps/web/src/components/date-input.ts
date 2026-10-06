@@ -39,6 +39,12 @@ export class CatsDateInput extends LitElement {
     this.end = text(value?.end ?? null)
   }
 
+  /** Whether the owner has anything typed or chosen (a half-typed date has no value yet but must not count as empty). */
+  hasInput(): boolean {
+    const points = this.qualifier === 'between' ? [this.start, this.end] : [this.start]
+    return points.some((point) => Boolean(point.year.trim() || point.month || point.day.trim()))
+  }
+
   validationMessage(keepLegacy = false): string {
     if (keepLegacy && !this.edited) return ''
     const points = this.qualifier === 'between' ? [this.start, this.end] : [this.start]

@@ -212,3 +212,63 @@ def test_affinity_uses_descriptive_result_when_required_sex_is_unknown():
     assert result is not None
     assert result.label == "родственник по браку"
     assert result.certainty == "descriptive"
+
+
+def _family():
+    ids = {name: uuid4() for name in ("katya", "natalia", "viktor", "alexander", "son")}
+    people = {
+        ids["katya"]: KinshipPerson(ids["katya"], "F", False),
+        ids["natalia"]: KinshipPerson(ids["natalia"], "F", False),
+        ids["viktor"]: KinshipPerson(ids["viktor"], "M", False),
+        ids["alexander"]: KinshipPerson(ids["alexander"], "M", False),
+        ids["son"]: KinshipPerson(ids["son"], "M", False),
+    }
+    links = [
+        KinshipParentLink(ids["natalia"], ids["katya"], "biological"),
+        KinshipParentLink(ids["viktor"], ids["katya"], "biological"),
+        KinshipParentLink(ids["alexander"], ids["son"], "biological"),
+    ]
+    return ids, people, links
+
+
+def test_mothers_husband_is_a_stepfather_and_her_former_husband_stays_father():
+    ids, people, links = _family()
+    unions = [KinshipUnion(ids["natalia"], ids["viktor"], divorced=True), KinshipUnion(ids["natalia"], ids["alexander"])]
+
+    stepfather = resolve_kinship(ids["katya"], ids["alexander"], people, links, unions)
+    father = resolve_kinship(ids["katya"], ids["viktor"], people, links, unions)
+
+    assert (stepfather.label, stepfather.kind, stepfather.reason) == ("отчим", "affinity", "супруг родителя")
+    assert father.label == "отец"
+
+
+def test_spouses_child_is_a_stepchild_and_divorce_makes_everything_former():
+    ids, people, links = _family()
+    unions = [KinshipUnion(ids["natalia"], ids["viktor"], divorced=True), KinshipUnion(ids["natalia"], ids["alexander"], divorced=True)]
+
+    assert resolve_kinship(ids["alexander"], ids["katya"], people, links, unions).label == "бывшая падчерица"
+    assert resolve_kinship(ids["natalia"], ids["son"], people, links, unions).label == "бывший пасынок"
+    assert resolve_kinship(ids["natalia"], ids["viktor"], people, links, unions).label == "бывший муж"
+    assert resolve_kinship(ids["viktor"], ids["natalia"], people, links, unions).label == "бывшая жена"
+    assert resolve_kinship(ids["katya"], ids["alexander"], people, links, unions).label == "бывший отчим"
+
+
+def test_stepmother_and_unknown_sex():
+    ids, people, links = _family()
+    stepmother = uuid4()
+    people[stepmother] = KinshipPerson(stepmother, "F", False)
+    unknown = uuid4()
+    people[unknown] = KinshipPerson(unknown, None, False)
+    unions = [KinshipUnion(ids["viktor"], stepmother), KinshipUnion(ids["natalia"], unknown)]
+
+    assert resolve_kinship(ids["katya"], stepmother, people, links, unions).label == "мачеха"
+    unclear = resolve_kinship(ids["katya"], unknown, people, links, unions)
+    assert (unclear.label, unclear.certainty) == ("супруг родителя", "descriptive")
+
+
+def test_blood_relationship_wins_over_a_step_relationship():
+    ids, people, links = _family()
+    links.append(KinshipParentLink(ids["alexander"], ids["katya"], "biological"))
+    unions = [KinshipUnion(ids["natalia"], ids["alexander"])]
+
+    assert resolve_kinship(ids["katya"], ids["alexander"], people, links, unions).label == "отец"

@@ -45,6 +45,7 @@ class TreeUnionResponse(BaseModel):
     partner_one_id: UUID | None
     partner_two_id: UUID | None
     union_type: str | None
+    divorced: bool = False
 
 
 class TreeRelationPathResponse(BaseModel):

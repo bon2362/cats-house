@@ -29,6 +29,7 @@ class KinshipParentLink:
 class KinshipUnion:
     partner_one_id: UUID
     partner_two_id: UUID
+    divorced: bool = False
 
 
 @dataclass(frozen=True)
@@ -125,9 +126,23 @@ def _resolve_affinity(
         partners.setdefault(union.partner_two_id, set()).add(union.partner_one_id)
     centre = people[centre_id]
     target = people[target_id]
+    former = {frozenset((union.partner_one_id, union.partner_two_id)) for union in unions if union.divorced}
+
+    def ended(first: UUID, second: UUID) -> bool:
+        return frozenset((first, second)) in former
 
     if target_id in partners.get(centre_id, set()):
-        return _spouse_result(target.sex)
+        return _former(_spouse_result(target.sex), ended(centre_id, target_id), target.sex)
+
+    centre_parents = parents.get(centre_id, set())
+    for parent_id in sorted(centre_parents, key=str):
+        if target_id in partners.get(parent_id, set()) and target_id not in centre_parents:
+            return _former(_step(target.sex, "отчим", "мачеха", "супруг родителя"), ended(parent_id, target_id), target.sex)
+
+    for spouse_id in sorted(partners.get(centre_id, set()), key=str):
+        target_parents = parents.get(target_id, set())
+        if spouse_id in target_parents and centre_id not in target_parents:
+            return _former(_step(target.sex, "пасынок", "падчерица", "ребёнок супруга"), ended(centre_id, spouse_id), target.sex)
 
     children = {child_id for child_id, parent_ids in parents.items() if centre_id in parent_ids}
     if any(target_id in partners.get(child_id, set()) for child_id in children):
@@ -163,6 +178,21 @@ def _gendered_affinity(sex: str | None, male: str, female: str, reason: str) -> 
     if not _is_known_sex(sex):
         return KinshipResult("родственник по браку", "descriptive", "descriptive", reason)
     return KinshipResult(_gendered(sex, male, female, ""), "affinity", "confirmed", reason)
+
+
+def _step(sex: str | None, male: str, female: str, reason: str) -> KinshipResult:
+    """Step-relation label; with unknown sex the reason itself is the descriptive label."""
+    if not _is_known_sex(sex):
+        return KinshipResult(reason, "descriptive", "descriptive", reason)
+    return _gendered_affinity(sex, male, female, reason)
+
+
+def _former(result: KinshipResult, divorced: bool, sex: str | None) -> KinshipResult:
+    """«бывший»/«бывшая» for relations that exist only through a dissolved union."""
+    if not divorced or result.kind != "affinity":
+        return result
+    prefix = "бывший" if _is_male(sex) else "бывшая"
+    return KinshipResult(f"{prefix} {result.label}", result.kind, result.certainty, f"{result.reason}, союз расторгнут")
 
 
 def _spouse_parent_result(centre_sex: str | None, target_sex: str | None) -> KinshipResult:

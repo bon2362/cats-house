@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_session
 from app.genealogy.dates import format_date_ru
-from app.genealogy.read_service import featured_person, get_public_person, normalize_public_name, public_events, public_family, public_person_media, public_person_summary, search_people
+from app.genealogy.read_service import featured_person, get_public_person, normalize_public_name, public_events, public_family, public_person_media, public_person_summary, public_siblings, search_people
 
 router = APIRouter()
 
@@ -42,6 +42,7 @@ class PersonResponse(PersonSearchResponse):
     parents: list[PersonSearchResponse]
     children: list[PersonSearchResponse]
     partners: list[PersonSearchResponse]
+    siblings: list[PersonSearchResponse] = []
     media: list[PublicMediaResponse]
 
 
@@ -73,6 +74,7 @@ def get_person(person_id: UUID, request: Request, session: Session = Depends(get
         parents=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in parents],
         children=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in children],
         partners=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in partners],
+        siblings=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in public_siblings(session, person.id)],
         media=[
             PublicMediaResponse(
                 id=item.id,
