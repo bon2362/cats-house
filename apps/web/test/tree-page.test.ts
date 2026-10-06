@@ -5,7 +5,7 @@ import '../src/pages/tree-page'
 const graph = {
   people: [
     { id: 'anna', display_name: 'Анна', sex: 'F', birth_label: '1900', death_label: null, is_hidden: false, is_root: true },
-    { id: 'boris', display_name: 'Борис', sex: 'M', birth_label: '1930', death_label: null, is_hidden: false, is_root: false },
+    { id: 'boris', display_name: 'Борис', sex: 'M', birth_label: '1930', death_label: null, is_hidden: false, is_root: false, relationship: { label: 'сын', kind: 'blood-direct', certainty: 'confirmed', reason: 'прямая линия родства' } },
   ],
   unions: [],
   partner_links: [],
@@ -153,6 +153,7 @@ it('opens an inspector only after selecting a card and recentres on double click
   tree.dispatchEvent(new CustomEvent('person-select', { detail: { personId: 'boris' }, bubbles: true, composed: true }))
   await (element as unknown as { updateComplete: Promise<void> }).updateComplete
   expect(element.shadowRoot?.querySelector('.inspector')?.textContent).toContain('Борис')
+  expect(element.shadowRoot?.querySelector('.inspector')?.textContent).toContain('прямая линия родства')
 
   tree.dispatchEvent(new CustomEvent('person-center', { detail: { personId: 'boris' }, bubbles: true, composed: true }))
   await new Promise((resolve) => setTimeout(resolve, 0))

@@ -146,12 +146,13 @@ it('uses a person’s known relationship to the centre instead of a generic labe
   const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData }
   graph.graph = {
     people: [
-      { id: 'father', display_name: 'Пётр', sex: 'M', birth_label: null, death_label: null, is_hidden: false, is_root: false },
-      { id: 'mother', display_name: 'Анна', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
+      { id: 'father', display_name: 'Пётр', sex: 'M', birth_label: null, death_label: null, is_hidden: false, is_root: false, relationship: { label: 'отец', kind: 'blood-direct', certainty: 'confirmed', reason: 'прямая линия родства' } },
+      { id: 'mother', display_name: 'Анна', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false, relationship: { label: 'мать', kind: 'blood-direct', certainty: 'confirmed', reason: 'прямая линия родства' } },
       { id: 'root', display_name: 'Мария', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: true },
-      { id: 'sister', display_name: 'Ксения', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
-      { id: 'spouse', display_name: 'Иван', sex: 'M', birth_label: null, death_label: null, is_hidden: false, is_root: false },
-      { id: 'daughter', display_name: 'Вера', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
+      { id: 'sister', display_name: 'Ксения', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false, relationship: { label: 'сестра', kind: 'blood-sibling', certainty: 'confirmed', reason: 'общие родители' } },
+      { id: 'spouse', display_name: 'Иван', sex: 'M', birth_label: null, death_label: null, is_hidden: false, is_root: false, relationship: { label: 'зять', kind: 'affinity', certainty: 'confirmed', reason: 'муж сестры' } },
+      { id: 'daughter', display_name: 'Вера', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false, relationship: { label: 'дочь', kind: 'blood-direct', certainty: 'confirmed', reason: 'прямая линия родства' } },
+      { id: 'unrelated', display_name: 'Ольга', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
     ],
     unions: [
       { id: 'parents', partner_one_id: 'father', partner_two_id: 'mother', union_type: 'marriage' },
@@ -175,8 +176,9 @@ it('uses a person’s known relationship to the centre instead of a generic labe
   expect(role('father')).toBe('ОТЕЦ')
   expect(role('mother')).toBe('МАТЬ')
   expect(role('sister')).toBe('СЕСТРА')
-  expect(role('spouse')).toBe('МУЖ')
+  expect(role('spouse')).toBe('ЗЯТЬ')
   expect(role('daughter')).toBe('ДОЧЬ')
+  expect(role('unrelated')).toBe('УЧАСТНИК СЕМЬИ')
 })
 
 it('gives a long full name a wider card instead of truncating it', () => {
