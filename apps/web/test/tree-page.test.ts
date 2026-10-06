@@ -61,7 +61,8 @@ it('loads the full family, fits the graph, and stores all mode in the URL', asyn
   expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/tree/anna?mode=all&depth=2')
   expect(window.location.search).toContain('mode=all')
   expect(element.shadowRoot?.querySelector('cats-tree-graph')).not.toBeNull()
-  expect(element.shadowRoot?.querySelector('.scene')?.getAttribute('style')).toContain('scale(1.6)')
+  expect(Number(element.shadowRoot?.querySelector('.percent')?.textContent?.replace('%', ''))).toBeGreaterThan(30)
+  expect(Number(element.shadowRoot?.querySelector('.percent')?.textContent?.replace('%', ''))).toBeLessThanOrEqual(160)
   expect([...((element.shadowRoot?.querySelectorAll('.control-right button') ?? []))].filter((button) => button.textContent === '−' || button.textContent === '+').every((button) => (button as HTMLButtonElement).disabled)).toBe(true)
 })
 
@@ -172,7 +173,8 @@ it('fits the graph into the available viewport instead of using a fixed percenta
   ;[...(element.shadowRoot?.querySelectorAll('button') ?? [])].find((button) => button.textContent === 'Вписать')?.click()
   await (element as unknown as { updateComplete: Promise<void> }).updateComplete
 
-  expect(element.shadowRoot?.querySelector('.scene')?.getAttribute('style')).toContain('scale(1.6)')
+  expect(Number(element.shadowRoot?.querySelector('.percent')?.textContent?.replace('%', ''))).toBeGreaterThan(30)
+  expect(Number(element.shadowRoot?.querySelector('.percent')?.textContent?.replace('%', ''))).toBeLessThanOrEqual(160)
 })
 
 it('starts canvas dragging from a tree card instead of reserving cards as a dead zone', async () => {

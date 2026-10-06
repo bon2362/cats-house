@@ -46,4 +46,35 @@ it('uses the union hub as the only parent-child source and keeps every endpoint 
   expect(paths).toHaveLength(2)
   expect(paths.every((path) => path.from.kind === 'union' && path.from.id === 'parents' && path.to.kind === 'card')).toBe(true)
   expect(paths.map((path) => path.to.id).sort()).toEqual(['first', 'second'])
+  const bus = paths.map((path) => path.d.match(/V ([0-9.]+) H/)?.[1])
+  expect(new Set(bus).size).toBe(1)
+})
+
+it('marks incomplete family blocks with an actionable continuation', () => {
+  const graph: TreeGraphData = {
+    people: [person('mother', 'Mother', true)],
+    unions: [{ id: 'parents', partner_one_id: 'mother', partner_two_id: 'missing-father', union_type: 'marriage' }], partner_links: [],
+    parent_links: [{ parent_id: 'mother', child_id: 'missing-child', union_id: 'parents', relationship_type: 'biological' }], links: [], relation_path: null,
+  }
+
+  const layout = layoutFamilyBlocks(graph, { direction: 'vertical' })
+
+  expect(layout.continuations).toEqual([expect.objectContaining({ count: 2, sourcePersonId: 'mother' })])
+  expect(layout.paths.some((item) => item.kind === 'continuation' && item.to.kind === 'continuation')).toBe(true)
+})
+
+it('collapses distant all-family branches while retaining a continuation for them', () => {
+  const graph: TreeGraphData = {
+    people: [person('root', 'Root', true), person('child'), person('grandchild'), person('great-grandchild')], unions: [], partner_links: [],
+    parent_links: [
+      { parent_id: 'root', child_id: 'child', relationship_type: 'biological' },
+      { parent_id: 'child', child_id: 'grandchild', relationship_type: 'biological' },
+      { parent_id: 'grandchild', child_id: 'great-grandchild', relationship_type: 'biological' },
+    ], links: [], relation_path: null,
+  }
+
+  const layout = layoutFamilyBlocks(graph, { direction: 'vertical', collapseDistant: true, compactDepth: 2 })
+
+  expect(Object.keys(layout.nodes).sort()).toEqual(['child', 'grandchild', 'root'])
+  expect(layout.continuations).toEqual([expect.objectContaining({ count: 1, sourcePersonId: 'grandchild' })])
 })
