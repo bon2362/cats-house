@@ -1,6 +1,6 @@
 from uuid import UUID, uuid4
 
-from app.genealogy.kinship import KinshipParentLink, KinshipPerson, resolve_kinship
+from app.genealogy.kinship import KinshipParentLink, KinshipPerson, KinshipUnion, resolve_kinship
 
 
 def person(sex: str | None = None) -> KinshipPerson:
@@ -16,11 +16,16 @@ def resolve(
     target: KinshipPerson,
     links: list[KinshipParentLink],
     *known_people: KinshipPerson,
+    unions: list[KinshipUnion] | None = None,
 ):
     people = {item.id: item for item in (centre, target, *known_people)}
     for item_id in {edge.parent_id for edge in links} | {edge.child_id for edge in links}:
         people.setdefault(item_id, KinshipPerson(id=item_id, sex=None, is_archived=False))
-    return resolve_kinship(centre.id, target.id, people, links, [])
+    return resolve_kinship(centre.id, target.id, people, links, unions or [])
+
+
+def union(first: KinshipPerson, second: KinshipPerson) -> KinshipUnion:
+    return KinshipUnion(partner_one_id=first.id, partner_two_id=second.id)
 
 
 def test_blood_resolves_full_sister_from_two_shared_biological_parents():
@@ -106,4 +111,66 @@ def test_blood_returns_descriptive_result_for_equally_short_incompatible_paths()
 
     assert result is not None
     assert result.kind == "descriptive"
+    assert result.certainty == "descriptive"
+
+
+def test_affinity_resolves_spouse_and_childs_spouse():
+    centre, wife, daughter, daughters_husband, son, sons_wife = (
+        person("male"), person("female"), person("female"), person("male"), person("male"), person("female")
+    )
+
+    wife_result = resolve(centre, wife, [], wife, unions=[union(centre, wife)])
+    daughters_husband = resolve(centre, daughters_husband, [link(centre, daughter)], daughter, unions=[union(daughter, daughters_husband)])
+    sons_wife = resolve(centre, sons_wife, [link(centre, son)], son, unions=[union(son, sons_wife)])
+
+    assert wife_result is not None and wife_result.label == "жена"
+    assert daughters_husband is not None and daughters_husband.label == "зять"
+    assert sons_wife is not None and sons_wife.label == "невестка"
+
+
+def test_affinity_resolves_in_laws_from_centres_sex():
+    centre, wife, wifes_father, husband, husbands_sister = (
+        person("male"), person("female"), person("male"), person("male"), person("female")
+    )
+    wife_result = resolve(centre, wifes_father, [link(wifes_father, wife)], wife, unions=[union(centre, wife)])
+    female_centre, husbands_parent = person("female"), person()
+    sister_result = resolve(
+        female_centre,
+        husbands_sister,
+        [link(husbands_parent, husband), link(husbands_parent, husbands_sister)],
+        husband,
+        husbands_parent,
+        unions=[union(female_centre, husband)],
+    )
+
+    assert wife_result is not None and wife_result.label == "тесть"
+    assert sister_result is not None and sister_result.label == "золовка"
+
+
+def test_affinity_resolves_yatrovka_only_for_wives_of_two_brothers():
+    father, mother = person("male"), person("female")
+    first_brother, second_brother = person("male"), person("male")
+    centre, target = person("female"), person("female")
+
+    result = resolve(
+        centre,
+        target,
+        [link(father, first_brother), link(mother, first_brother), link(father, second_brother), link(mother, second_brother)],
+        father,
+        mother,
+        first_brother,
+        second_brother,
+        unions=[union(centre, first_brother), union(target, second_brother)],
+    )
+
+    assert result is not None and result.label == "ятровка"
+
+
+def test_affinity_uses_descriptive_result_when_required_sex_is_unknown():
+    centre, spouse = person("male"), person()
+
+    result = resolve(centre, spouse, [], spouse, unions=[union(centre, spouse)])
+
+    assert result is not None
+    assert result.label == "родственник по браку"
     assert result.certainty == "descriptive"

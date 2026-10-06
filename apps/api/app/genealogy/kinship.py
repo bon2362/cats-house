@@ -52,11 +52,22 @@ def resolve_kinship(
     below the blood classifier in a subsequent task; unions are accepted now
     so the public pure function's signature remains stable.
     """
-    del unions
     if centre_id == target_id or centre_id not in people or target_id not in people:
         return None
 
     parents = _biological_parents(parent_links)
+    blood = _resolve_blood(centre_id, target_id, people, parents)
+    if blood is not None:
+        return blood
+    return _resolve_affinity(centre_id, target_id, people, parents, unions)
+
+
+def _resolve_blood(
+    centre_id: UUID,
+    target_id: UUID,
+    people: dict[UUID, KinshipPerson],
+    parents: dict[UUID, set[UUID]],
+) -> KinshipResult | None:
     centre_ancestors = _ancestor_distances(centre_id, parents)
     target_ancestors = _ancestor_distances(target_id, parents)
     target = people[target_id]
@@ -99,6 +110,71 @@ def resolve_kinship(
         for _, centre_distance, target_distance in common
         if centre_distance + target_distance == shortest
     )
+
+
+def _resolve_affinity(
+    centre_id: UUID,
+    target_id: UUID,
+    people: dict[UUID, KinshipPerson],
+    parents: dict[UUID, set[UUID]],
+    unions: Sequence[KinshipUnion],
+) -> KinshipResult | None:
+    partners: dict[UUID, set[UUID]] = {}
+    for union in unions:
+        partners.setdefault(union.partner_one_id, set()).add(union.partner_two_id)
+        partners.setdefault(union.partner_two_id, set()).add(union.partner_one_id)
+    centre = people[centre_id]
+    target = people[target_id]
+
+    if target_id in partners.get(centre_id, set()):
+        return _spouse_result(target.sex)
+
+    children = {child_id for child_id, parent_ids in parents.items() if centre_id in parent_ids}
+    if any(target_id in partners.get(child_id, set()) for child_id in children):
+        return _gendered_affinity(target.sex, "зять", "невестка", "супруг ребёнка")
+
+    siblings = {person_id for person_id, parent_ids in parents.items() if person_id != centre_id and parent_ids & parents.get(centre_id, set())}
+    if any(target_id in partners.get(sibling_id, set()) for sibling_id in siblings):
+        return _gendered_affinity(target.sex, "зять", "невестка", "супруг сиблинга")
+
+    for spouse_id in partners.get(centre_id, set()):
+        if target_id in parents.get(spouse_id, set()):
+            return _spouse_parent_result(centre.sex, target.sex)
+        if parents.get(target_id, set()) & parents.get(spouse_id, set()):
+            return _spouse_sibling_result(centre.sex, target.sex)
+
+    if _is_female(centre.sex) and _is_female(target.sex):
+        for centre_spouse in partners.get(centre_id, set()):
+            for target_spouse in partners.get(target_id, set()):
+                if len(parents.get(centre_spouse, set()) & parents.get(target_spouse, set())) >= 2:
+                    return KinshipResult("ятровка", "affinity", "confirmed", "жёны двух родных братьев")
+    return None
+
+
+def _spouse_result(sex: str | None) -> KinshipResult:
+    return _gendered_affinity(sex, "муж", "жена", "супруг центра")
+
+
+def _gendered_affinity(sex: str | None, male: str, female: str, reason: str) -> KinshipResult:
+    if not _is_known_sex(sex):
+        return KinshipResult("родственник по браку", "descriptive", "descriptive", reason)
+    return KinshipResult(_gendered(sex, male, female, ""), "affinity", "confirmed", reason)
+
+
+def _spouse_parent_result(centre_sex: str | None, target_sex: str | None) -> KinshipResult:
+    if _is_male(centre_sex):
+        return _gendered_affinity(target_sex, "тесть", "тёща", "родитель супруги")
+    if _is_female(centre_sex):
+        return _gendered_affinity(target_sex, "свёкор", "свекровь", "родитель супруга")
+    return KinshipResult("родственник по браку", "descriptive", "descriptive", "родитель супруга центра")
+
+
+def _spouse_sibling_result(centre_sex: str | None, target_sex: str | None) -> KinshipResult:
+    if _is_male(centre_sex):
+        return _gendered_affinity(target_sex, "шурин", "свояченица", "сиблинг супруги")
+    if _is_female(centre_sex):
+        return _gendered_affinity(target_sex, "деверь", "золовка", "сиблинг супруга")
+    return KinshipResult("родственник по браку", "descriptive", "descriptive", "сиблинг супруга центра")
 
 
 def _biological_parents(links: Sequence[KinshipParentLink]) -> dict[UUID, set[UUID]]:
