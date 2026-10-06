@@ -1,0 +1,32 @@
+import { expect, test } from '@playwright/test'
+
+const password = process.env.CATS_HOUSE_E2E_OWNER_PASSWORD
+
+test('the owner signs in from the header, returns to the page and signs out', async ({ page }) => {
+  test.skip(!password, 'Set CATS_HOUSE_E2E_OWNER_PASSWORD to run the owner sign-in check.')
+  await page.goto('/')
+  await page.getByRole('link', { name: 'Вход для владельца' }).click()
+  await expect(page).toHaveURL(/\/login\?next=%2F$/)
+
+  await page.getByLabel('Пароль').fill(password!)
+  await page.getByRole('button', { name: 'Войти' }).click()
+
+  await expect(page).toHaveURL(/\/$/)
+  await expect(page.locator('cats-house-app .owner-state')).toContainText('Владелец')
+  await page.getByRole('button', { name: 'Выйти' }).click()
+  await expect(page.getByRole('link', { name: 'Вход для владельца' })).toBeVisible()
+})
+
+test('on a phone-width screen the header keeps the owner link fully on screen', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 700 })
+  await page.goto('/')
+  const link = page.locator('cats-house-app a.owner-link')
+  await expect(link).toBeVisible()
+  expect(await link.innerText()).toBe('Владелец')
+
+  const box = await link.boundingBox()
+  const headerWidth = await page.evaluate(() => document.querySelector('cats-house-app')!.shadowRoot!.querySelector('header')!.scrollWidth)
+
+  expect(box!.x + box!.width).toBeLessThanOrEqual(390)
+  expect(headerWidth).toBeLessThanOrEqual(390)
+})

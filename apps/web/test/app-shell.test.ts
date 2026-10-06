@@ -105,4 +105,90 @@ describe('cats-house-app', () => {
     expect(card.shadowRoot?.textContent).toContain('Анна Иванова')
     history.pushState({}, '', '/')
   })
+
+  const statusFetch = (status: { authenticated: boolean; totp_required: boolean }) => vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+    const url = String(input)
+    if (url.endsWith('/api/v1/auth/status')) return Promise.resolve(new Response(JSON.stringify(status)))
+    if (url.endsWith('/api/v1/auth/logout') && init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }))
+    return Promise.resolve(new Response('[]'))
+  })
+  const settled = async (element: CatsHouseApp) => { await new Promise((resolve) => setTimeout(resolve, 0)); await element.updateComplete }
+
+  it('links the guest to the login page with the current address as next', async () => {
+    history.pushState({}, '', '/?q=Анна&page=2')
+    vi.stubGlobal('fetch', statusFetch({ authenticated: false, totp_required: false }))
+    const element = await renderApp()
+    await settled(element)
+
+    const link = element.shadowRoot?.querySelector('a.owner-link') as HTMLAnchorElement
+    expect(link.getAttribute('href')).toBe(`/login?next=${encodeURIComponent(`${window.location.pathname}${window.location.search}`)}`)
+    expect(decodeURIComponent(link.getAttribute('href')!.split('next=')[1])).toBe('/?q=%D0%90%D0%BD%D0%BD%D0%B0&page=2')
+    expect(link.querySelector('.short')?.textContent).toBe('Владелец')
+  })
+
+  it('shows the owner state and signs out from the header', async () => {
+    const fetchMock = statusFetch({ authenticated: true, totp_required: false })
+    vi.stubGlobal('fetch', fetchMock)
+    const element = await renderApp()
+    await settled(element)
+
+    expect(element.shadowRoot?.querySelector('.owner-state')?.textContent).toContain('Владелец')
+    ;(element.shadowRoot?.querySelector('button.owner-logout') as HTMLButtonElement).click()
+    await settled(element)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/logout', { method: 'POST' })
+    expect(element.shadowRoot?.querySelector('a.owner-link')).not.toBeNull()
+  })
+
+  it('treats a failing status request as a guest', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => String(input).endsWith('/auth/status') ? Promise.reject(new Error('down')) : Promise.resolve(new Response('[]'))))
+    const element = await renderApp()
+    await settled(element)
+
+    expect(element.shadowRoot?.querySelector('a.owner-link')).not.toBeNull()
+  })
+
+  it('renders the login page on /login with status and next', async () => {
+    history.pushState({}, '', '/login?next=%2Fpeople%2F7')
+    vi.stubGlobal('fetch', statusFetch({ authenticated: false, totp_required: true }))
+    const element = await renderApp()
+    await settled(element)
+
+    const page = element.shadowRoot?.querySelector('cats-login-page') as HTMLElement & { status: { totp_required: boolean }; next: string | null }
+    expect(page).not.toBeNull()
+    expect(page.next).toBe('/people/7')
+    expect(page.status.totp_required).toBe(true)
+    expect(element.shadowRoot?.querySelector('cats-house-home')).toBeNull()
+  })
+
+  it('signs out when the login page asks for it', async () => {
+    history.pushState({}, '', '/login')
+    const fetchMock = statusFetch({ authenticated: true, totp_required: false })
+    vi.stubGlobal('fetch', fetchMock)
+    const element = await renderApp()
+    await settled(element)
+
+    element.shadowRoot?.querySelector('cats-login-page')?.dispatchEvent(new CustomEvent('owner-logout-request', { bubbles: true, composed: true }))
+    await settled(element)
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/auth/logout', { method: 'POST' })
+    expect((element.shadowRoot?.querySelector('cats-login-page') as HTMLElement & { status: { authenticated: boolean } }).status.authenticated).toBe(false)
+  })
+
+  it('stays signed in and says so when the server could not sign the owner out', async () => {
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/auth/status')) return Promise.resolve(new Response(JSON.stringify({ authenticated: true, totp_required: false })))
+      if (url.endsWith('/api/v1/auth/logout')) return Promise.resolve(new Response('error', { status: 500 }))
+      return Promise.resolve(new Response('[]'))
+    }))
+    const element = await renderApp()
+    await settled(element)
+
+    ;(element.shadowRoot?.querySelector('button.owner-logout') as HTMLButtonElement).click()
+    await settled(element)
+
+    expect(element.shadowRoot?.querySelector('.owner-state')).not.toBeNull()
+    expect(element.shadowRoot?.querySelector('[role="alert"]')?.textContent).toContain('Не удалось выйти')
+  })
 })
