@@ -13,11 +13,59 @@ def database_session(client, settings):
         yield session
 
 
-def create_person(session, run, name):
-    person = Person(import_run_id=run.id, display_name=name, source_uid=str(uuid4()))
+def create_person(session, run, name, sex=None):
+    person = Person(import_run_id=run.id, display_name=name, source_uid=str(uuid4()), sex=sex)
     session.add(person)
     session.flush()
     return person
+
+
+def test_tree_people_include_server_computed_sister_label(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="r" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    father = create_person(database_session, run, "Борис", "male")
+    mother = create_person(database_session, run, "Анна", "female")
+    root = create_person(database_session, run, "Пётр", "male")
+    sister = create_person(database_session, run, "Ксения", "female")
+    database_session.add_all((
+        ParentChild(parent_id=father.id, child_id=root.id, relationship_type="biological"),
+        ParentChild(parent_id=mother.id, child_id=root.id, relationship_type="biological"),
+        ParentChild(parent_id=father.id, child_id=sister.id, relationship_type="biological"),
+        ParentChild(parent_id=mother.id, child_id=sister.id, relationship_type="biological"),
+    ))
+    database_session.commit()
+
+    response = client.get(f"/api/v1/tree/{root.id}?mode=close&depth=2")
+
+    assert response.status_code == 200
+    person = next(item for item in response.json()["people"] if item["id"] == str(sister.id))
+    assert person["relationship"] == {
+        "label": "сестра",
+        "kind": "blood-sibling",
+        "certainty": "confirmed",
+        "reason": "общие родители",
+    }
+
+
+def test_tree_relationship_reason_hides_archived_intermediary_name(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="s" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    archived_parent = create_person(database_session, run, "Секретное имя")
+    archived_parent.is_archived = True
+    root = create_person(database_session, run, "Пётр", "male")
+    sibling = create_person(database_session, run, "Ксения", "female")
+    database_session.add_all((
+        ParentChild(parent_id=archived_parent.id, child_id=root.id, relationship_type="biological"),
+        ParentChild(parent_id=archived_parent.id, child_id=sibling.id, relationship_type="biological"),
+    ))
+    database_session.commit()
+
+    response = client.get(f"/api/v1/tree/{root.id}?mode=close&depth=2")
+
+    assert response.status_code == 200
+    assert "Секретное имя" not in response.text
 
 
 def test_all_mode_returns_entire_connected_public_component(client, database_session):
@@ -328,6 +376,13 @@ def test_path_mode_returns_shortest_chain_and_common_ancestor(client, database_s
         "person_ids": [str(first.id), str(parent.id), str(second.id)],
         "labels": ["родитель", "ребёнок"],
         "common_ancestor_id": str(parent.id),
+    }
+    target = next(person for person in response.json()["people"] if person["id"] == str(second.id))
+    assert target["relationship"] == {
+        "label": "неполнородный сиблинг",
+        "kind": "blood-sibling",
+        "certainty": "confirmed",
+        "reason": "один общий родитель",
     }
 
 

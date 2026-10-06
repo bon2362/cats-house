@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.genealogy.kinship import KinshipParentLink, KinshipPerson, KinshipUnion, KinshipResult, resolve_kinship
 from app.genealogy.read_service import normalize_public_name
 from app.models.genealogy import Event, ParentChild, Person, Union
 
@@ -23,6 +24,15 @@ class TreePerson:
     death_label: str | None
     is_hidden: bool
     is_root: bool
+    relationship: TreeRelationship | None
+
+
+@dataclass(frozen=True)
+class TreeRelationship:
+    label: str
+    kind: str
+    certainty: str
+    reason: str
 
 
 @dataclass(frozen=True)
@@ -131,6 +141,41 @@ def build_tree_graph(
             .order_by(ParentChild.parent_id, ParentChild.child_id, ParentChild.relationship_type)
         )
     )
+    resolution_ids = _all_relative_ids(session, root.id)
+    resolution_people_by_id = {
+        person.id: person for person in session.scalars(select(Person).where(Person.id.in_(resolution_ids))).all()
+    }
+    resolution_parent_links = list(
+        session.scalars(
+            select(ParentChild).where(
+                ParentChild.parent_id.in_(resolution_ids), ParentChild.child_id.in_(resolution_ids)
+            )
+        )
+    )
+    resolution_unions = [
+        union
+        for union in session.scalars(
+            select(Union).where(or_(Union.partner_one_id.in_(resolution_ids), Union.partner_two_id.in_(resolution_ids)))
+        )
+        if union.partner_one_id in resolution_ids and union.partner_two_id in resolution_ids
+    ]
+    kinship_people = {
+        person.id: KinshipPerson(
+            id=person.id,
+            sex=person.sex,
+            is_archived=person.is_archived,
+            display_name=None if person.is_archived else normalize_public_name(person.display_name),
+        )
+        for person in resolution_people_by_id.values()
+    }
+    kinship_parent_links = [
+        KinshipParentLink(link.parent_id, link.child_id, link.relationship_type) for link in resolution_parent_links
+    ]
+    kinship_unions = [
+        KinshipUnion(union.partner_one_id, union.partner_two_id)
+        for union in resolution_unions
+        if union.partner_one_id is not None and union.partner_two_id is not None
+    ]
     included_unions = [
         union
         for union in unions
@@ -147,6 +192,13 @@ def build_tree_graph(
             death_label=None if person.is_archived else life_labels.get(person.id, {}).get("death"),
             is_hidden=person.is_archived,
             is_root=person.id == root.id,
+            relationship=(
+                None
+                if person.id == root.id
+                else _tree_relationship(
+                    resolve_kinship(root.id, person.id, kinship_people, kinship_parent_links, kinship_unions)
+                )
+            ),
         )
         for person in sorted(people_by_id.values(), key=lambda item: str(item.id))
     ]
@@ -174,6 +226,17 @@ def build_tree_graph(
         parent_links=graph_links,
         partner_links=graph_unions,
         relation_path=relation_path,
+    )
+
+
+def _tree_relationship(result: KinshipResult | None) -> TreeRelationship | None:
+    if result is None:
+        return None
+    return TreeRelationship(
+        label=result.label,
+        kind=result.kind,
+        certainty=result.certainty,
+        reason=result.reason,
     )
 
 
