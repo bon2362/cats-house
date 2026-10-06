@@ -57,6 +57,11 @@ class TreeRelationPath:
     labels: list[str]
     common_ancestor_id: UUID | None
 
+@dataclass(frozen=True)
+class TreeContinuation:
+    source_person_id: UUID
+    count: int
+
 
 @dataclass(frozen=True)
 class TreeGraph:
@@ -65,6 +70,7 @@ class TreeGraph:
     parent_links: list[TreeParentLink]
     partner_links: list[TreeUnion]
     relation_path: TreeRelationPath | None
+    continuations: list[TreeContinuation]
 
 
 def build_tree_graph(
@@ -141,6 +147,13 @@ def build_tree_graph(
             .order_by(ParentChild.parent_id, ParentChild.child_id, ParentChild.relationship_type)
         )
     )
+    boundary_counts: dict[UUID, set[UUID]] = {}
+    if mode != "all":
+        for link in session.scalars(select(ParentChild)).all():
+            parent_visible, child_visible = link.parent_id in included_ids, link.child_id in included_ids
+            if parent_visible != child_visible:
+                source, omitted = (link.parent_id, link.child_id) if parent_visible else (link.child_id, link.parent_id)
+                boundary_counts.setdefault(source, set()).add(omitted)
     resolution_ids = _all_relative_ids(session, root.id)
     resolution_people_by_id = {
         person.id: person for person in session.scalars(select(Person).where(Person.id.in_(resolution_ids))).all()
@@ -226,6 +239,7 @@ def build_tree_graph(
         parent_links=graph_links,
         partner_links=graph_unions,
         relation_path=relation_path,
+        continuations=[TreeContinuation(source_person_id=source, count=len(omitted)) for source, omitted in sorted(boundary_counts.items(), key=lambda item: str(item[0]))],
     )
 
 

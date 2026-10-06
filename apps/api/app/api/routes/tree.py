@@ -52,6 +52,10 @@ class TreeRelationPathResponse(BaseModel):
     labels: list[str]
     common_ancestor_id: UUID | None
 
+class TreeContinuationResponse(BaseModel):
+    source_person_id: UUID
+    count: int
+
 
 class TreeResponse(BaseModel):
     people: list[TreePersonResponse]
@@ -60,6 +64,7 @@ class TreeResponse(BaseModel):
     partner_links: list[TreeUnionResponse]
     links: list[TreeLinkResponse]
     relation_path: TreeRelationPathResponse | None
+    continuations: list[TreeContinuationResponse]
 
 
 @router.get("/tree/{person_id}", response_model=TreeResponse)
@@ -95,4 +100,5 @@ def get_tree(
         partner_links=[TreeUnionResponse(**union.__dict__) for union in graph.partner_links],
         links=[TreeLinkResponse(parent_id=link.parent_id, child_id=link.child_id) for link in graph.parent_links],
         relation_path=TreeRelationPathResponse(**graph.relation_path.__dict__) if graph.relation_path else None,
+        continuations=[TreeContinuationResponse(**item.__dict__) for item in graph.continuations],
     )
