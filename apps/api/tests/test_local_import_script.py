@@ -18,3 +18,12 @@ def test_local_import_script_accepts_at5_option_before_database_access():
 
     assert result.returncode == 2
     assert "абсолютный путь к GEDCOM" in result.stderr
+
+
+def test_at5_event_sync_script_requires_an_absolute_at5_path_before_database_access():
+    script = Path(__file__).parents[3] / "scripts" / "sync-at5-events.py"
+
+    result = run([sys.executable, str(script), "--at5", "relative.at5"], capture_output=True, text=True)
+
+    assert result.returncode == 2
+    assert "абсолютный путь к файлу AT5" in result.stderr
