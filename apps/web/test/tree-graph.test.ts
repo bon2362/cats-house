@@ -87,6 +87,31 @@ it('does not render a dangling hub or downward segment for a union without visib
   expect(graph.shadowRoot?.querySelector('path.partner')?.getAttribute('d')?.split(' M ')).toHaveLength(1)
 })
 
+it('emits the family block id when a continuation is clicked', async () => {
+  await import('../src/pages/tree-graph')
+  const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData; collapseDistant: boolean }
+  graph.graph = {
+    people: [
+      { id: 'root', display_name: 'Root', sex: null, birth_label: null, death_label: null, is_hidden: false, is_root: true },
+      { id: 'child', display_name: 'Child', sex: null, birth_label: null, death_label: null, is_hidden: false, is_root: false },
+      { id: 'grandchild', display_name: 'Grandchild', sex: null, birth_label: null, death_label: null, is_hidden: false, is_root: false },
+      { id: 'great-grandchild', display_name: 'Great grandchild', sex: null, birth_label: null, death_label: null, is_hidden: false, is_root: false },
+    ], unions: [], partner_links: [],
+    parent_links: [
+      { parent_id: 'root', child_id: 'child', relationship_type: 'biological' },
+      { parent_id: 'child', child_id: 'grandchild', relationship_type: 'biological' },
+      { parent_id: 'grandchild', child_id: 'great-grandchild', relationship_type: 'biological' },
+    ], links: [], relation_path: null,
+  }
+  graph.collapseDistant = true
+  const emitted = new Promise<CustomEvent<{ blockId: string }>>((resolve) => graph.addEventListener('continuation-select', (event) => resolve(event as CustomEvent<{ blockId: string }>), { once: true }))
+  document.body.append(graph)
+  await (graph as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  ;(graph.shadowRoot?.querySelector('button.continuation') as HTMLButtonElement).click()
+  expect((await emitted).detail.blockId).toBe('parent:grandchild')
+})
+
 it('keeps siblings together beneath their union without overlapping any cards', () => {
   const graph: TreeGraphData = {
     people: [

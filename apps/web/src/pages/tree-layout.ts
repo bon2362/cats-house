@@ -2,14 +2,14 @@ import { buildFamilyBlocks, type FamilyEndpoint } from './tree-family-blocks'
 import { cardMetrics, type GenerationBand, type LayoutOptions, type NodePosition, type TreeGraphData } from './tree-graph'
 
 export type RoutedPath = { kind: 'partner' | 'parent-child' | 'continuation'; from: FamilyEndpoint; to: FamilyEndpoint; d: string }
-export type FamilyContinuation = { id: string; x: number; y: number; count: number; sourcePersonId: string }
+export type FamilyContinuation = { id: string; blockId: string; x: number; y: number; count: number; sourcePersonId: string }
 export type FamilyLayout = { nodes: Record<string, NodePosition>; unions: Record<string, { x: number; y: number; generation: number }>; continuations: FamilyContinuation[]; paths: RoutedPath[]; bands: GenerationBand[]; width: number; height: number }
 
 const card = (data: TreeGraphData, id: string) => data.people.find((person) => person.id === id)!
 const path = (from: FamilyEndpoint, to: FamilyEndpoint, d: string, kind: RoutedPath['kind']): RoutedPath => ({ from, to, d, kind })
 
-export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions & { collapseDistant?: boolean; compactDepth?: number }): FamilyLayout {
-  const displayData = options.collapseDistant ? compactFamily(data, options.compactDepth ?? 2) : data
+export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions & { collapseDistant?: boolean; compactDepth?: number; expandedBlockIds?: Iterable<string> }): FamilyLayout {
+  const displayData = options.collapseDistant ? compactFamily(data, options.compactDepth ?? 2, new Set(options.expandedBlockIds)) : data
   const graph = buildFamilyBlocks(displayData), nodes: Record<string, NodePosition> = {}, unions: FamilyLayout['unions'] = {}, continuations: FamilyContinuation[] = [], paths: RoutedPath[] = []
   const row = new Map<number, string[]>(), placed = new Set<string>()
   for (const block of graph.blocks) {
@@ -36,13 +36,16 @@ export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions &
     if (block.partnerIds.length === 2) {
       const [aId, bId] = block.partnerIds, a = nodes[aId], b = nodes[bId]
       if (a && b) {
+        const between = Object.entries(nodes).some(([id, node]) => id !== aId && id !== bId && node.generation === a.generation && (options.direction === 'vertical'
+          ? node.x < Math.max(a.x, b.x) && node.x + node.width > Math.min(a.x + a.width, b.x + b.width)
+          : node.y < Math.max(a.y, b.y) && node.y + node.height > Math.min(a.y + a.height, b.y + b.height)))
         const hub = options.direction === 'vertical'
-          ? { x: (a.x + a.width / 2 + b.x + b.width / 2) / 2, y: a.y + a.height / 2, generation: block.generation }
-          : { x: a.x + a.width / 2, y: (a.y + a.height / 2 + b.y + b.height / 2) / 2, generation: block.generation }
+          ? { x: (a.x + a.width / 2 + b.x + b.width / 2) / 2, y: between ? Math.min(a.y, b.y) - 28 : a.y + a.height / 2, generation: block.generation }
+          : { x: between ? Math.min(a.x, b.x) - 28 : a.x + a.width / 2, y: (a.y + a.height / 2 + b.y + b.height / 2) / 2, generation: block.generation }
         unions[block.id] = hub
         const d = options.direction === 'vertical'
-          ? `M ${a.x + a.width} ${a.y + a.height / 2} H ${hub.x} H ${b.x}`
-          : `M ${a.x + a.width / 2} ${a.y + a.height} V ${hub.y} V ${b.y}`
+          ? between ? `M ${a.x + a.width / 2} ${a.y} V ${hub.y} H ${b.x + b.width / 2} V ${b.y}` : `M ${a.x + a.width} ${a.y + a.height / 2} H ${hub.x} H ${b.x}`
+          : between ? `M ${a.x} ${a.y + a.height / 2} H ${hub.x} V ${b.y + b.height / 2} H ${b.x}` : `M ${a.x + a.width / 2} ${a.y + a.height} V ${hub.y} V ${b.y}`
         paths.push(path({ kind: 'card', id: aId }, { kind: 'card', id: bId }, d, 'partner'))
       }
     }
@@ -79,7 +82,7 @@ export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions &
         const endpoint = options.direction === 'vertical'
           ? { x: hub?.x ?? source.x + source.width / 2, y: Math.max(hub?.y ?? 0, source.y + source.height) + 44 }
           : { x: Math.max(hub?.x ?? 0, source.x + source.width) + 44, y: hub?.y ?? source.y + source.height / 2 }
-        continuations.push({ id, ...endpoint, count: block.collapsedCount, sourcePersonId })
+        continuations.push({ id, blockId: block.id, ...endpoint, count: block.collapsedCount, sourcePersonId })
         const start = hub ?? (options.direction === 'vertical' ? { x: source.x + source.width / 2, y: source.y + source.height } : { x: source.x + source.width, y: source.y + source.height / 2 })
         const d = `M ${start.x} ${start.y} ${options.direction === 'vertical' ? `V ${endpoint.y}` : `H ${endpoint.x}`}`
         paths.push(path(hub ? { kind: 'union', id: block.id } : { kind: 'card', id: sourcePersonId }, { kind: 'continuation', id }, d, 'continuation'))
@@ -99,7 +102,7 @@ export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions &
   return { nodes, unions, continuations, paths, bands, width, height }
 }
 
-function compactFamily(data: TreeGraphData, maxDepth: number): TreeGraphData {
+function compactFamily(data: TreeGraphData, maxDepth: number, expandedBlockIds: Set<string>): TreeGraphData {
   const root = data.people.find((person) => person.is_root) ?? data.people[0]
   if (!root) return data
   const adjacent = new Map<string, Set<string>>()
@@ -115,6 +118,16 @@ function compactFamily(data: TreeGraphData, maxDepth: number): TreeGraphData {
     const id = queue.shift()!, step = distance.get(id)!
     if (step >= maxDepth) continue
     for (const next of adjacent.get(id) ?? []) if (!distance.has(next)) { distance.set(next, step + 1); queue.push(next) }
+  }
+  for (const union of data.unions) {
+    if (!expandedBlockIds.has(union.id)) continue
+    for (const id of [union.partner_one_id, union.partner_two_id, ...data.parent_links.filter((link) => link.union_id === union.id).map((link) => link.child_id)]) if (id) distance.set(id, 0)
+  }
+  for (const id of expandedBlockIds) {
+    if (!id.startsWith('parent:')) continue
+    const parentId = id.slice('parent:'.length)
+    distance.set(parentId, 0)
+    for (const link of data.parent_links.filter((item) => item.parent_id === parentId && !item.union_id)) distance.set(link.child_id, 0)
   }
   return { ...data, people: data.people.filter((person) => distance.has(person.id)) }
 }

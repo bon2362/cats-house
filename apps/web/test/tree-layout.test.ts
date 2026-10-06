@@ -50,6 +50,21 @@ it('uses the union hub as the only parent-child source and keeps every endpoint 
   expect(new Set(bus).size).toBe(1)
 })
 
+it('routes a repeated partner union through a free channel instead of a third card', () => {
+  const graph: TreeGraphData = {
+    people: [person('a', 'A', true), person('b'), person('c')],
+    unions: [
+      { id: 'ab', partner_one_id: 'a', partner_two_id: 'b', union_type: 'marriage' },
+      { id: 'ac', partner_one_id: 'a', partner_two_id: 'c', union_type: 'marriage' },
+    ], partner_links: [], parent_links: [], links: [], relation_path: null,
+  }
+
+  const layout = layoutFamilyBlocks(graph, { direction: 'vertical' })
+
+  expect(layout.unions.ac.y).toBeLessThan(layout.nodes.a.y)
+  expect(layout.paths.find((path) => path.from.id === 'a' && path.to.id === 'c')?.d).toContain(`V ${layout.unions.ac.y}`)
+})
+
 it('marks incomplete family blocks with an actionable continuation', () => {
   const graph: TreeGraphData = {
     people: [person('mother', 'Mother', true)],
@@ -77,4 +92,8 @@ it('collapses distant all-family branches while retaining a continuation for the
 
   expect(Object.keys(layout.nodes).sort()).toEqual(['child', 'grandchild', 'root'])
   expect(layout.continuations).toEqual([expect.objectContaining({ count: 1, sourcePersonId: 'grandchild' })])
+
+  const expanded = layoutFamilyBlocks(graph, { direction: 'vertical', collapseDistant: true, compactDepth: 2, expandedBlockIds: ['parent:grandchild'] })
+  expect(expanded.nodes['great-grandchild']).toBeDefined()
+  expect(expanded.continuations).toHaveLength(0)
 })

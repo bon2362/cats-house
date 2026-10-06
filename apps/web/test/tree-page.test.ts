@@ -86,6 +86,24 @@ it('finds a person in all-family mode and makes the chosen result the centre', a
   expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/tree/boris?mode=all&depth=2')
 })
 
+it('expands the selected continuation block in place without loading a new tree', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+  vi.stubGlobal('fetch', fetchMock)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  ;([...(element.shadowRoot?.querySelectorAll('.modes button') ?? [])].find((button) => button.textContent === 'Вся семья') as HTMLButtonElement).click()
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const tree = element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement & { expandedBlockIds: string[] }
+  const requestsBeforeExpansion = fetchMock.mock.calls.length
+  tree.dispatchEvent(new CustomEvent('continuation-select', { detail: { blockId: 'parent:anna' }, bubbles: true, composed: true }))
+  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  expect(tree.expandedBlockIds).toContain('parent:anna')
+  expect(fetchMock).toHaveBeenCalledTimes(requestsBeforeExpansion)
+})
+
 it('shows a recoverable Russian error when graph loading fails', async () => {
   const fetchMock = vi.fn().mockResolvedValue({ ok: false })
   vi.stubGlobal('fetch', fetchMock)
