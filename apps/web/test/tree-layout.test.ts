@@ -50,19 +50,24 @@ it('uses the union hub as the only parent-child source and keeps every endpoint 
   expect(new Set(bus).size).toBe(1)
 })
 
-it('routes a repeated partner union through a free channel instead of a third card', () => {
+it('routes a repeated partner union and its child through a free channel instead of a third card', () => {
   const graph: TreeGraphData = {
-    people: [person('a', 'A', true), person('b'), person('c')],
+    people: [person('a', 'A', true), person('b'), person('c'), person('child')],
     unions: [
       { id: 'ab', partner_one_id: 'a', partner_two_id: 'b', union_type: 'marriage' },
       { id: 'ac', partner_one_id: 'a', partner_two_id: 'c', union_type: 'marriage' },
-    ], partner_links: [], parent_links: [], links: [], relation_path: null,
+    ], partner_links: [], parent_links: [
+      { parent_id: 'a', child_id: 'child', union_id: 'ac', relationship_type: 'biological' },
+      { parent_id: 'c', child_id: 'child', union_id: 'ac', relationship_type: 'biological' },
+    ], links: [], relation_path: null,
   }
 
   const layout = layoutFamilyBlocks(graph, { direction: 'vertical' })
 
   expect(layout.unions.ac.y).toBeLessThan(layout.nodes.a.y)
+  expect(layout.unions.ac.x).toBeGreaterThan(layout.nodes.c.x + layout.nodes.c.width)
   expect(layout.paths.find((path) => path.from.id === 'a' && path.to.id === 'c')?.d).toContain(`V ${layout.unions.ac.y}`)
+  expect(layout.paths.find((path) => path.from.id === 'ac' && path.to.id === 'child')?.d).toContain(`M ${layout.unions.ac.x} ${layout.unions.ac.y}`)
 })
 
 it('marks incomplete family blocks with an actionable continuation', () => {

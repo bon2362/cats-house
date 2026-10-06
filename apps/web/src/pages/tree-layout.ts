@@ -40,7 +40,7 @@ export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions &
           ? node.x < Math.max(a.x, b.x) && node.x + node.width > Math.min(a.x + a.width, b.x + b.width)
           : node.y < Math.max(a.y, b.y) && node.y + node.height > Math.min(a.y + a.height, b.y + b.height)))
         const hub = options.direction === 'vertical'
-          ? { x: (a.x + a.width / 2 + b.x + b.width / 2) / 2, y: between ? Math.min(a.y, b.y) - 28 : a.y + a.height / 2, generation: block.generation }
+          ? { x: between ? Math.max(a.x + a.width, b.x + b.width) + 28 : (a.x + a.width / 2 + b.x + b.width / 2) / 2, y: between ? Math.min(a.y, b.y) - 28 : a.y + a.height / 2, generation: block.generation }
           : { x: between ? Math.min(a.x, b.x) - 28 : a.x + a.width / 2, y: (a.y + a.height / 2 + b.y + b.height / 2) / 2, generation: block.generation }
         unions[block.id] = hub
         const d = options.direction === 'vertical'
