@@ -124,25 +124,30 @@ def _apply(session: Session, person: Person, kind: str, value: LifeEventInput | 
     event.place = _clean(value.place, MAX_PLACE_LENGTH, "Место")
 
 
+def _assign(session: Session, person: Person, edit: PersonEdit) -> None:
+    """Validate the form and write it into the person (no commit, no change log)."""
+    names = {name: _clean(getattr(edit, name), MAX_NAME_LENGTH, "Часть имени") for name in NAME_FIELDS}
+    if not names["given_name"] and not names["surname"]:
+        raise PersonEditError("Укажите имя или фамилию.")
+    if edit.sex not in (None, "M", "F"):
+        raise PersonEditError("Неизвестное значение пола.")
+    if edit.death_status not in ("unknown", "deceased"):
+        raise PersonEditError("Неизвестное состояние смерти.")
+    for name, value in names.items():
+        setattr(person, name, value)
+    person.sex = edit.sex
+    person.display_name = compose_display_name(names["given_name"], names["patronymic"], names["surname"])
+    _apply(session, person, "BIRT", edit.birth)
+    _apply(session, person, "DEAT", (edit.death or LifeEventInput(None, None)) if edit.death_status == "deceased" else None)
+
+
 def update_person(session: Session, person_id: UUID, edit: PersonEdit, owner_email: str) -> dict:
     person = session.get(Person, person_id)
     if person is None:
         raise LookupError("Человек не найден.")
     try:
-        names = {name: _clean(getattr(edit, name), MAX_NAME_LENGTH, "Часть имени") for name in NAME_FIELDS}
-        if not names["given_name"] and not names["surname"]:
-            raise PersonEditError("Укажите имя или фамилию.")
-        if edit.sex not in (None, "M", "F"):
-            raise PersonEditError("Неизвестное значение пола.")
-        if edit.death_status not in ("unknown", "deceased"):
-            raise PersonEditError("Неизвестное состояние смерти.")
         before = _snapshot(session, person)
-        for name, value in names.items():
-            setattr(person, name, value)
-        person.sex = edit.sex
-        person.display_name = compose_display_name(names["given_name"], names["patronymic"], names["surname"])
-        _apply(session, person, "BIRT", edit.birth)
-        _apply(session, person, "DEAT", (edit.death or LifeEventInput(None, None)) if edit.death_status == "deceased" else None)
+        _assign(session, person, edit)
         session.flush()
         after = _snapshot(session, person)
         changed = [key for key in after if after[key] != before[key]]

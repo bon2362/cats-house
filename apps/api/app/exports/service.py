@@ -37,7 +37,7 @@ def build_archive(session: Session) -> dict:
     return {
         "format": "cats-house-archive-v1",
         "people": [
-            {"archive_id": str(person.id), "display_name": person.display_name, "source_uid": person.source_uid, "sex": person.sex, "biography": person.biography, "is_archived": person.is_archived}
+            {"archive_id": str(person.id), "display_name": person.display_name, "surname": person.surname, "given_name": person.given_name, "patronymic": person.patronymic, "birth_surname": person.birth_surname, "source_uid": person.source_uid, "sex": person.sex, "biography": person.biography, "is_archived": person.is_archived}
             for person in people
         ],
         "unions": [
@@ -91,7 +91,7 @@ def restore_archive(session: Session, archive: dict) -> None:
     restored_people: dict[str, Person] = {}
     people_by_source_uid: dict[str, Person] = {}
     for data in archive["people"]:
-        person = Person(import_run_id=run.id, display_name=data["display_name"], source_uid=data.get("source_uid"), sex=data.get("sex"), biography=data.get("biography"), is_archived=data.get("is_archived", False))
+        person = Person(import_run_id=run.id, display_name=data["display_name"], surname=data.get("surname"), given_name=data.get("given_name"), patronymic=data.get("patronymic"), birth_surname=data.get("birth_surname"), source_uid=data.get("source_uid"), sex=data.get("sex"), biography=data.get("biography"), is_archived=data.get("is_archived", False))
         session.add(person)
         if data.get("archive_id"):
             restored_people[data["archive_id"]] = person

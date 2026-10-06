@@ -9,6 +9,7 @@ from app.api.dependencies import OwnerSession, require_owner
 from app.db.session import get_session
 from app.genealogy.dates import DateError, DatePoint, DateValue
 from app.genealogy.person_editing import LifeEventInput, PersonEdit, PersonEditError, editable_person, owner_search, update_person
+from app.genealogy.relatives import add_relative, family_overview, find_similar
 from app.genealogy.write_service import archive_person, create_parent_child_link, create_person_event, create_union, restore_person
 
 router = APIRouter()
@@ -56,6 +57,43 @@ def _life(body: LifeEventBody | None) -> LifeEventInput | None:
     return None if body is None else LifeEventInput(_date(body.date), body.place, body.date_text_keep)
 
 
+def _edit(body: "PersonEditBody") -> PersonEdit:
+    return PersonEdit(
+        surname=body.surname, given_name=body.given_name, patronymic=body.patronymic, birth_surname=body.birth_surname,
+        sex=body.sex, birth=_life(body.birth), death_status=body.death.status, death=_life(body.death),
+    )
+
+
+class RelativeBody(BaseModel):
+    relation: Literal["child", "parent", "spouse", "sibling"]
+    person: PersonEditBody | None = None
+    existing_id: UUID | None = None
+    union_id: UUID | None = None
+
+
+@router.get("/admin/people/similar")
+def similar_people(given_name: str = Query(default=""), surname: str = Query(default=""), birth_surname: str = Query(default=""), owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> list[dict]:
+    return find_similar(session, given_name, surname, birth_surname)
+
+
+@router.get("/admin/people/{person_id}/family")
+def person_family(person_id: UUID, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
+    try:
+        return family_overview(session, person_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.post("/admin/people/{person_id}/relatives", status_code=201)
+def add_person_relative(person_id: UUID, body: RelativeBody, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
+    try:
+        return add_relative(session, person_id, body.relation, _edit(body.person) if body.person else None, body.existing_id, body.union_id, owner.email)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (PersonEditError, DateError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
 @router.get("/admin/people")
 def search_people_for_owner(query: str = Query(default=""), owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> list[dict]:
     return owner_search(session, query)
@@ -71,12 +109,8 @@ def read_person_for_owner(person_id: UUID, owner: OwnerSession = Depends(require
 
 @router.patch("/admin/people/{person_id}")
 def save_person(person_id: UUID, body: PersonEditBody, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
-    edit = PersonEdit(
-        surname=body.surname, given_name=body.given_name, patronymic=body.patronymic, birth_surname=body.birth_surname,
-        sex=body.sex, birth=_life(body.birth), death_status=body.death.status, death=_life(body.death),
-    )
     try:
-        return update_person(session, person_id, edit, owner.email)
+        return update_person(session, person_id, _edit(body), owner.email)
     except LookupError as error:
         raise HTTPException(status_code=404, detail=str(error)) from error
     except (PersonEditError, DateError) as error:

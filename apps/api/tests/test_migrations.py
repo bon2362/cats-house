@@ -74,3 +74,11 @@ def test_display_name_resize_preserves_rows_and_is_idempotent_on_sqlite():
         columns = {column["name"]: column for column in inspect(connection).get_columns("people")}
         assert columns["display_name"]["type"].length == 512
         assert connection.scalar(select(people.c.display_name)) == "Анна Иванова"
+
+
+def test_people_and_unions_may_exist_without_an_import(postgres_url):
+    upgrade_database(postgres_url)
+    inspector = inspect(create_engine(postgres_url))
+
+    assert {column["name"]: column for column in inspector.get_columns("people")}["import_run_id"]["nullable"] is True
+    assert {column["name"]: column for column in inspector.get_columns("unions")}["import_run_id"]["nullable"] is True

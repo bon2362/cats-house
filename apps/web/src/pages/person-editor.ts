@@ -8,11 +8,17 @@ type BirthMode = 'none' | 'date'
 type DeathMode = 'unknown' | 'deceased' | 'date'
 type Names = { surname: string; given_name: string; patronymic: string; birth_surname: string }
 const text = (value: string) => value.trim() || null
+const EMPTY_PERSON: EditablePerson = {
+  id: '', display_name: '', is_archived: false, surname: null, given_name: null, patronymic: null, birth_surname: null, sex: null,
+  birth: null, death: { status: 'unknown', date: null, date_text: null, place: null },
+}
 
 export class CatsPersonEditor extends LitElement {
-  static properties = { personId: { attribute: false }, standalone: { attribute: false }, person: { state: true }, names: { state: true }, sex: { state: true }, birthMode: { state: true }, deathMode: { state: true }, birthDate: { state: true }, deathDate: { state: true }, birthPlace: { state: true }, deathPlace: { state: true }, error: { state: true }, busy: { state: true } }
+  static properties = { personId: { attribute: false }, standalone: { attribute: false }, draft: { attribute: false }, submitLabel: { attribute: false }, person: { state: true }, names: { state: true }, sex: { state: true }, birthMode: { state: true }, deathMode: { state: true }, birthDate: { state: true }, deathDate: { state: true }, birthPlace: { state: true }, deathPlace: { state: true }, error: { state: true }, busy: { state: true } }
   declare personId: string
   declare standalone: boolean
+  declare draft: boolean
+  declare submitLabel: string
   private declare person: EditablePerson | null
   private declare names: Names
   private declare sex: '' | 'M' | 'F'
@@ -28,7 +34,7 @@ export class CatsPersonEditor extends LitElement {
 
   constructor() {
     super()
-    this.personId = ''; this.standalone = false; this.person = null; this.names = { surname: '', given_name: '', patronymic: '', birth_surname: '' }
+    this.personId = ''; this.standalone = false; this.draft = false; this.submitLabel = ''; this.person = null; this.names = { surname: '', given_name: '', patronymic: '', birth_surname: '' }
     this.sex = ''; this.birthMode = 'none'; this.deathMode = 'unknown'; this.birthDate = null; this.deathDate = null; this.birthPlace = ''; this.deathPlace = ''; this.error = ''; this.busy = false
   }
 
@@ -50,7 +56,8 @@ export class CatsPersonEditor extends LitElement {
     .notice { font-size:.8rem; color:var(--text-3,#6b6d69); margin:0; }
   `
 
-  connectedCallback() { super.connectedCallback(); void this.load() }
+  /** In draft mode the form starts empty and hands its payload to the parent instead of saving. */
+  connectedCallback() { super.connectedCallback(); if (this.draft) this.fill(EMPTY_PERSON); else void this.load() }
 
   private async load() {
     const result = await fetchEditablePerson(this.personId)
@@ -93,6 +100,10 @@ export class CatsPersonEditor extends LitElement {
       const message = input?.validationMessage(Boolean(view && !view.date && view.date_text))
       if (message) { this.error = message; return }
     }
+    if (this.draft) {
+      this.dispatchEvent(new CustomEvent('person-draft', { detail: this.payload(), bubbles: true, composed: true }))
+      return
+    }
     this.busy = true; this.error = ''
     const result = await savePerson(this.person.id, this.payload())
     this.busy = false
@@ -112,7 +123,13 @@ export class CatsPersonEditor extends LitElement {
   }
 
   private nameField(name: keyof Names, label: string) {
-    return html`<label>${label}<input name=${name} .value=${this.names[name]} @input=${(event: Event) => { this.names = { ...this.names, [name]: (event.target as HTMLInputElement).value } }} /></label>`
+    return html`<label>${label}<input name=${name} .value=${this.names[name]} @input=${(event: Event) => { this.names = { ...this.names, [name]: (event.target as HTMLInputElement).value }; this.reportDraftNames() }} /></label>`
+  }
+
+  private reportDraftNames() {
+    if (!this.draft) return
+    const { given_name, surname, birth_surname } = this.names
+    this.dispatchEvent(new CustomEvent('draft-names', { detail: { given_name, surname, birth_surname }, bubbles: true, composed: true }))
   }
 
   private legacy(view: { date: DateValue | null; date_text: string | null } | null | undefined, current: DateValue | null) {
@@ -123,7 +140,7 @@ export class CatsPersonEditor extends LitElement {
     if (!this.person) return this.error ? html`<p role="alert">${this.error}</p>` : html`<p>Загрузка…</p>`
     const person = this.person
     return html`
-      ${person.is_archived ? html`<p class="banner">Человек скрыт с сайта. Посетители видят вместо него «Сведения скрыты».</p>` : ''}
+      ${person.is_archived && !this.draft ? html`<p class="banner">Человек скрыт с сайта. Посетители видят вместо него «Сведения скрыты».</p>` : ''}
       <form @submit=${this.save} novalidate>
         <fieldset><legend>Имя</legend><div class="grid">
           ${this.nameField('surname', 'Фамилия')}${this.nameField('given_name', 'Имя')}${this.nameField('patronymic', 'Отчество')}${this.nameField('birth_surname', 'Фамилия при рождении')}
@@ -151,9 +168,9 @@ export class CatsPersonEditor extends LitElement {
         </fieldset>
         ${this.error ? html`<p role="alert">${this.error}</p>` : ''}
         <div class="actions">
-          <button class="primary" type="submit" ?disabled=${this.busy}>${this.busy ? 'Сохраняем…' : 'Сохранить'}</button>
+          <button class="primary" type="submit" ?disabled=${this.busy}>${this.busy ? 'Сохраняем…' : this.submitLabel || 'Сохранить'}</button>
           ${this.standalone ? '' : html`<button type="button" @click=${() => this.dispatchEvent(new CustomEvent('editor-cancel', { bubbles: true, composed: true }))}>Отмена</button>`}
-          <button class="danger" type="button" @click=${this.toggleVisibility}>${person.is_archived ? 'Вернуть на сайт' : 'Скрыть человека'}</button>
+          ${this.draft ? '' : html`<button class="danger" type="button" @click=${this.toggleVisibility}>${person.is_archived ? 'Вернуть на сайт' : 'Скрыть человека'}</button>`}
         </div>
       </form>`
   }

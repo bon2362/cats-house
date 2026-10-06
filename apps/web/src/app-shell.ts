@@ -2,6 +2,7 @@ import { LitElement, css, html } from 'lit'
 
 import { searchOwnerPeople } from './owner-api'
 import './pages/person-editor'
+import './pages/relative-section'
 import { ru } from './locales/ru'
 import './pages/home-page'
 import type { PersonSummary } from './pages/home-page'
@@ -102,7 +103,7 @@ export class CatsHouseApp extends LitElement {
       <div class="header-right"><section class="search" aria-label="Поиск по семье"><input type="search" placeholder="Найти человека по имени или фамилии" .value=${this.query} @input=${this.searchPeople} @keydown=${this.onSearchKeydown} />
         ${this.people.length ? html`<div class="search-menu" role="listbox">${this.people.map((person,index) => html`<a class="search-result ${index === this.activeResult ? 'active' : ''}" href="/people/${person.id}" role="option" aria-selected=${index === this.activeResult}><span class="monogram">${this.initials(person)}</span><span><span class="result-name">${person.display_name}</span><span class="result-meta">${person.years ?? 'годы неизвестны'}${person.parents_label ? ` · родители: ${person.parents_label}` : ''}</span>${person.is_archived ? html`<span class="result-meta">скрыт</span>` : ''}</span></a>`)}<a class="all-results" href="/?q=${encodeURIComponent(this.query)}">Все результаты →</a></div>` : ''}
       </section>${this.ownerControls()}</div></header>
-      ${isLoginPage ? html`<cats-login-page .status=${this.ownerStatus} .next=${new URLSearchParams(window.location.search).get('next')} @owner-logout-request=${this.signOut}></cats-login-page>` : isTreePage ? html`<cats-tree-page .rootId=${treeRootId} .isOwner=${this.ownerStatus.authenticated}></cats-tree-page>` : !this.person && this.hiddenPersonId && this.ownerStatus.authenticated ? html`<section class="hidden-person"><cats-person-editor .personId=${this.hiddenPersonId} .standalone=${true} @person-visibility-changed=${() => this.loadPersonFromPath()}></cats-person-editor></section>` : this.person ? html`<cats-person-card .person=${this.person} .isOwner=${this.ownerStatus.authenticated} @person-changed=${() => this.loadPersonFromPath()}></cats-person-card>` : html`<cats-house-home .connectionState=${this.connectionState} .people=${this.cataloguePeople}></cats-house-home>`}`
+      ${isLoginPage ? html`<cats-login-page .status=${this.ownerStatus} .next=${new URLSearchParams(window.location.search).get('next')} @owner-logout-request=${this.signOut}></cats-login-page>` : isTreePage ? html`<cats-tree-page .rootId=${treeRootId} .isOwner=${this.ownerStatus.authenticated}></cats-tree-page>` : !this.person && this.hiddenPersonId && this.ownerStatus.authenticated ? html`<section class="hidden-person"><cats-person-editor .personId=${this.hiddenPersonId} .standalone=${true} @person-visibility-changed=${() => this.loadPersonFromPath()}></cats-person-editor><cats-relative-section .personId=${this.hiddenPersonId} @person-changed=${() => this.loadPersonFromPath()}></cats-relative-section></section>` : this.person ? html`<cats-person-card .person=${this.person} .isOwner=${this.ownerStatus.authenticated} @person-changed=${() => this.loadPersonFromPath()}></cats-person-card>` : html`<cats-house-home .connectionState=${this.connectionState} .people=${this.cataloguePeople}></cats-house-home>`}`
   }
 }
 

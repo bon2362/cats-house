@@ -159,3 +159,60 @@ def test_owner_creates_family_links_and_changes_are_logged(client, database_sess
     assert database_session.query(Union).count() == 1
     assert database_session.query(ParentChild).count() == 1
     assert database_session.query(ChangeLog).filter(ChangeLog.entity_type.in_(["union", "parent_child"])).count() == 2
+
+
+def test_owner_links_people_from_different_imports(client, database_session):
+    first = create_person(database_session)
+    second = create_person(database_session)
+    login(client)
+
+    response = client.post("/api/v1/admin/unions", json={"partner_one_id": str(first.id), "partner_two_id": str(second.id), "union_type": "marriage"})
+
+    assert response.status_code == 201
+
+
+def test_guests_cannot_add_relatives_or_see_family_tools(client, database_session):
+    person = create_person(database_session)
+
+    assert client.get("/api/v1/admin/people/similar?given_name=Анна&surname=Иванова").status_code == 401
+    assert client.get(f"/api/v1/admin/people/{person.id}/family").status_code == 401
+    assert client.post(f"/api/v1/admin/people/{person.id}/relatives", json={"relation": "spouse", "person": FORM}).status_code == 401
+
+
+def test_owner_adds_a_new_spouse_and_sees_it_in_the_family(client, database_session):
+    person = create_person(database_session)
+    login(client)
+
+    response = client.post(f"/api/v1/admin/people/{person.id}/relatives", json={"relation": "spouse", "person": FORM, "existing_id": None, "union_id": None})
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["relation"] == "spouse" and body["created"] is True and body["person"]["display_name"] == "Анна Иванова"
+    family = client.get(f"/api/v1/admin/people/{person.id}/family").json()
+    assert [item["partner"]["display_name"] for item in family["unions"]] == ["Анна Иванова"]
+
+
+def test_similar_route_is_not_taken_for_a_person_id(client, database_session):
+    person = create_person(database_session)
+    login(client)
+    client.patch(f"/api/v1/admin/people/{person.id}", json=FORM)
+
+    response = client.get("/api/v1/admin/people/similar?given_name=анна&surname=иванова")
+
+    assert response.status_code == 200
+    assert [item["id"] for item in response.json()] == [str(person.id)]
+
+
+def test_relative_refusals_are_russian_422_and_missing_people_404(client, database_session):
+    from uuid import uuid4
+
+    person = create_person(database_session)
+    login(client)
+
+    both = client.post(f"/api/v1/admin/people/{person.id}/relatives", json={"relation": "spouse", "person": FORM, "existing_id": str(person.id)})
+    missing = client.post(f"/api/v1/admin/people/{person.id}/relatives", json={"relation": "spouse", "existing_id": str(uuid4())})
+    unknown_anchor = client.post(f"/api/v1/admin/people/{uuid4()}/relatives", json={"relation": "spouse", "person": FORM})
+
+    assert (both.status_code, both.json()) == (422, {"detail": "Выберите нового или существующего человека."})
+    assert (missing.status_code, missing.json()) == (404, {"detail": "Выбранный человек не найден."})
+    assert unknown_anchor.status_code == 404

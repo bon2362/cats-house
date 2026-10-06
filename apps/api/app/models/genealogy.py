@@ -30,7 +30,7 @@ class Person(Base):
     __table_args__ = (UniqueConstraint("import_run_id", "source_uid", name="uq_people_import_source_uid"),)
 
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    import_run_id: Mapped[UUID] = mapped_column(ForeignKey("import_runs.id"))
+    import_run_id: Mapped[UUID | None] = mapped_column(ForeignKey("import_runs.id"), nullable=True)
     display_name: Mapped[str] = mapped_column(String(767))
     surname: Mapped[str | None] = mapped_column(String(255), nullable=True)
     given_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -46,7 +46,7 @@ class Union(Base):
     __tablename__ = "unions"
 
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    import_run_id: Mapped[UUID] = mapped_column(ForeignKey("import_runs.id"))
+    import_run_id: Mapped[UUID | None] = mapped_column(ForeignKey("import_runs.id"), nullable=True)
     partner_one_id: Mapped[UUID | None] = mapped_column(ForeignKey("people.id"), nullable=True)
     partner_two_id: Mapped[UUID | None] = mapped_column(ForeignKey("people.id"), nullable=True)
     union_type: Mapped[str | None] = mapped_column(String(64), nullable=True)

@@ -67,10 +67,8 @@ def create_union(
         raise LookupError("Один из людей не найден.")
     if first.id == second.id:
         raise ValueError("Нельзя создать союз человека с самим собой.")
-    if first.import_run_id != second.import_run_id:
-        raise ValueError("Люди должны относиться к одному импорту.")
     union = Union(
-        import_run_id=first.import_run_id,
+        import_run_id=first.import_run_id if first.import_run_id == second.import_run_id else None,
         partner_one_id=partner_one_id,
         partner_two_id=partner_two_id,
         union_type=union_type,

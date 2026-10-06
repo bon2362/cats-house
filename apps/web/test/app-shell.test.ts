@@ -230,6 +230,8 @@ describe('cats-house-app', () => {
     const editor = element.shadowRoot!.querySelector('cats-person-editor') as HTMLElement & { personId: string; standalone: boolean }
     expect(editor.personId).toBe('h1')
     expect(editor.standalone).toBe(true)
+    const section = element.shadowRoot!.querySelector('cats-relative-section') as HTMLElement & { personId: string }
+    expect(section?.personId).toBe('h1')
   })
 
   it('does not treat a server error as a hidden person', async () => {

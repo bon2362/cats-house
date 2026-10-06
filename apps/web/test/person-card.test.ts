@@ -158,3 +158,17 @@ it('uses extended life details when the API provides them and omits empty events
   expect(element.shadowRoot?.textContent).toContain('1934 · Торжок')
   expect(element.shadowRoot?.textContent).not.toContain('Рождениедата неизвестна')
 })
+
+it('offers adding relatives only to the owner', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}')))
+  const card = document.createElement('cats-person-card') as HTMLElement & { person: unknown; isOwner: boolean; updateComplete: Promise<boolean> }
+  card.person = person
+  document.body.append(card)
+  await card.updateComplete
+  expect(card.shadowRoot!.querySelector('cats-relative-section')).toBeNull()
+
+  card.isOwner = true
+  await card.updateComplete
+
+  expect((card.shadowRoot!.querySelector('#family cats-relative-section') as HTMLElement & { personId: string }).personId).toBe('p1')
+})

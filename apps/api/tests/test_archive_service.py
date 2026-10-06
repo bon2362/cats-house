@@ -46,3 +46,25 @@ def test_archive_restores_complete_genealogy_and_media_manifest(postgres_url):
         restored_event = target.query(Event).one()
         assert (restored_event.place, restored_event.description) == ("Москва", "Запись")
         assert archive["counts"] == {"people": 3, "events": 1, "unions": 1, "parent_children": 1, "media": 1, "media_links": 1}
+
+
+def test_archive_keeps_name_parts_and_people_created_on_the_site(postgres_url):
+    engine = create_engine(postgres_url)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Session(engine) as source:
+        person = Person(import_run_id=None, source_uid=None, display_name="Анна Петровна Иванова", surname="Иванова", given_name="Анна", patronymic="Петровна", birth_surname="Сидорова")
+        partner = Person(import_run_id=None, source_uid=None, display_name="Пётр Иванов", given_name="Пётр", surname="Иванов")
+        source.add_all([person, partner])
+        source.flush()
+        source.add(Union(import_run_id=None, partner_one_id=person.id, partner_two_id=partner.id, union_type="marriage"))
+        source.commit()
+        archive = build_archive(source)
+
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Session(engine) as target:
+        restore_archive(target, archive)
+        restored = target.query(Person).filter_by(display_name="Анна Петровна Иванова").one()
+        assert (restored.surname, restored.given_name, restored.patronymic, restored.birth_surname) == ("Иванова", "Анна", "Петровна", "Сидорова")
+        assert target.query(Union).count() == 1

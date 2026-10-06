@@ -184,3 +184,40 @@ describe('cats-person-editor', () => {
     expect(button(editor, 'Вернуть на сайт')).toBeDefined()
   })
 })
+
+describe('cats-person-editor in draft mode', () => {
+  async function renderDraft() {
+    const fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+    const editor = document.createElement('cats-person-editor') as Editor & { draft: boolean; submitLabel: string }
+    editor.draft = true
+    editor.submitLabel = 'Добавить'
+    document.body.append(editor)
+    await editor.updateComplete
+    return { editor, fetchMock }
+  }
+
+  it('starts empty, without hiding, and never calls the API', async () => {
+    const { editor, fetchMock } = await renderDraft()
+
+    expect((editor.shadowRoot!.querySelector('[name="given_name"]') as HTMLInputElement).value).toBe('')
+    expect([...editor.shadowRoot!.querySelectorAll('button')].map((item) => item.textContent?.trim())).toEqual(['Добавить', 'Отмена'])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it('hands the filled form to its parent and reports names as they are typed', async () => {
+    const { editor, fetchMock } = await renderDraft()
+    const drafts: unknown[] = [], names: unknown[] = []
+    editor.addEventListener('person-draft', (event) => drafts.push((event as CustomEvent).detail))
+    editor.addEventListener('draft-names', (event) => names.push((event as CustomEvent).detail))
+
+    type(editor, 'given_name', 'Мария')
+    type(editor, 'surname', 'Иванова')
+    await editor.updateComplete
+    await click(editor, 'Добавить')
+
+    expect(names.at(-1)).toEqual({ given_name: 'Мария', surname: 'Иванова', birth_surname: '' })
+    expect(drafts).toEqual([{ surname: 'Иванова', given_name: 'Мария', patronymic: null, birth_surname: null, sex: null, birth: null, death: { status: 'unknown', date: null, place: null, date_text_keep: false } }])
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
