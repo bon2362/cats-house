@@ -183,3 +183,32 @@ def read_at5_people(path: Path) -> dict[int, str | None]:
         if connection is not None:
             connection.close()
     return {person_id: {1: "M", 2: "F"}.get(sex) for person_id, sex in rows}
+
+
+# ValuesStr.f_id of person name parts in Древо Жизни (rec_table 13 = Persons).
+NAME_PART_FIELDS = {64: "surname", 66: "given_name", 67: "patronymic"}
+PERSONS_TABLE = 13
+
+
+def read_at5_name_parts(path: Path) -> dict[int, dict[str, str]]:
+    """Surname, given name and patronymic per AT5 person id, read-only."""
+    if not path.is_absolute() or not path.is_file():
+        raise At5ImportError("Укажите существующий абсолютный путь к файлу AT5.")
+    connection = None
+    try:
+        connection = sqlite3.connect(f"file:{path}?mode=ro", uri=True)
+        rows = connection.execute(
+            f"SELECT rec_id, f_id, vstr FROM ValuesStr WHERE rec_table = ? AND f_id IN ({', '.join('?' * len(NAME_PART_FIELDS))})",
+            (PERSONS_TABLE, *NAME_PART_FIELDS),
+        ).fetchall()
+    except sqlite3.Error as error:
+        raise At5ImportError("Не удалось прочитать имена из файла AT5.") from error
+    finally:
+        if connection is not None:
+            connection.close()
+    parts: dict[int, dict[str, str]] = {}
+    for person_id, field_id, value in rows:
+        cleaned = " ".join((value or "").split())
+        if cleaned:
+            parts.setdefault(person_id, {})[NAME_PART_FIELDS[field_id]] = cleaned
+    return parts

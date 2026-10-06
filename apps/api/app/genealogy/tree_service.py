@@ -7,6 +7,7 @@ from uuid import UUID
 from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
+from app.genealogy.dates import format_date_ru
 from app.genealogy.kinship import KinshipParentLink, KinshipPerson, KinshipUnion, KinshipResult, resolve_kinship
 from app.genealogy.read_service import normalize_public_name
 from app.models.genealogy import Event, ParentChild, Person, Union
@@ -392,7 +393,7 @@ def _life_labels(session: Session, person_ids: set[UUID]) -> dict[UUID, dict[str
         if event.person_id is None or not event.date_text:
             continue
         if event.event_type in {"BIRT", "BIRTH"}:
-            labels.setdefault(event.person_id, {}).setdefault("birth", event.date_text)
+            labels.setdefault(event.person_id, {}).setdefault("birth", format_date_ru(event.date_text))
         if event.event_type in {"DEAT", "DEATH"}:
-            labels.setdefault(event.person_id, {}).setdefault("death", event.date_text)
+            labels.setdefault(event.person_id, {}).setdefault("death", format_date_ru(event.date_text))
     return labels
