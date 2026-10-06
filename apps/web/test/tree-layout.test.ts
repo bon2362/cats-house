@@ -50,7 +50,7 @@ it('uses the union hub as the only parent-child source and keeps every endpoint 
   expect(new Set(bus).size).toBe(1)
 })
 
-it('routes a repeated partner union and its child through a free channel instead of a third card', () => {
+it('keeps each repeated-partner union on the connector beside its shared partner', () => {
   const graph: TreeGraphData = {
     people: [person('a', 'A', true), person('b'), person('c'), person('child')],
     unions: [
@@ -64,9 +64,13 @@ it('routes a repeated partner union and its child through a free channel instead
 
   const layout = layoutFamilyBlocks(graph, { direction: 'vertical' })
 
-  expect(layout.unions.ac.y).toBeLessThan(layout.nodes.a.y)
-  expect(layout.unions.ac.x).toBeGreaterThan(layout.nodes.c.x + layout.nodes.c.width)
-  expect(layout.paths.find((path) => path.from.id === 'a' && path.to.id === 'c')?.d).toContain(`V ${layout.unions.ac.y}`)
+  expect(layout.nodes.b.x + layout.nodes.b.width).toBeLessThanOrEqual(layout.nodes.a.x)
+  expect(layout.nodes.a.x + layout.nodes.a.width).toBeLessThanOrEqual(layout.nodes.c.x)
+  expect(layout.unions.ab.y).toBe(layout.nodes.a.y + layout.nodes.a.height / 2)
+  expect(layout.unions.ac.y).toBe(layout.nodes.a.y + layout.nodes.a.height / 2)
+  expect(layout.unions.ac.x).toBeGreaterThan(layout.nodes.a.x + layout.nodes.a.width)
+  expect(layout.unions.ac.x).toBeLessThan(layout.nodes.c.x)
+  expect(layout.paths.find((path) => path.from.id === 'a' && path.to.id === 'c')?.d).not.toContain(' V ')
   expect(layout.paths.find((path) => path.from.id === 'ac' && path.to.id === 'child')?.d).toContain(`M ${layout.unions.ac.x} ${layout.unions.ac.y}`)
 })
 

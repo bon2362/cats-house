@@ -8,6 +8,45 @@ export type FamilyLayout = { nodes: Record<string, NodePosition>; unions: Record
 const card = (data: TreeGraphData, id: string) => data.people.find((person) => person.id === id)!
 const path = (from: FamilyEndpoint, to: FamilyEndpoint, d: string, kind: RoutedPath['kind']): RoutedPath => ({ from, to, d, kind })
 
+function orderGeneration(ids: string[], data: TreeGraphData): string[] {
+  const members = [...new Set(ids)]
+  const memberSet = new Set(members)
+  const index = new Map(members.map((id, position) => [id, position]))
+  const partners = new Map<string, string[]>()
+  for (const union of data.unions) {
+    const [first, second] = [union.partner_one_id, union.partner_two_id]
+    if (!first || !second || !memberSet.has(first) || !memberSet.has(second)) continue
+    partners.set(first, [...(partners.get(first) ?? []), second])
+    partners.set(second, [...(partners.get(second) ?? []), first])
+  }
+  const roots = new Set(data.people.filter((person) => person.is_root).map((person) => person.id))
+  const candidates = [...members].sort((left, right) => {
+    const rootOrder = Number(roots.has(right)) - Number(roots.has(left))
+    if (rootOrder) return rootOrder
+    const degreeOrder = (partners.get(right)?.length ?? 0) - (partners.get(left)?.length ?? 0)
+    return degreeOrder || (index.get(left)! - index.get(right)!)
+  })
+  const remaining = new Set(members), ordered: string[] = []
+  for (const anchor of candidates) {
+    if (!remaining.has(anchor)) continue
+    const adjacent = (partners.get(anchor) ?? []).filter((id) => remaining.has(id))
+    if (adjacent.length > 1) {
+      ordered.push(adjacent[0], anchor, ...adjacent.slice(1))
+      remaining.delete(adjacent[0])
+      remaining.delete(anchor)
+      for (const id of adjacent.slice(1)) remaining.delete(id)
+      continue
+    }
+    ordered.push(anchor)
+    remaining.delete(anchor)
+    for (const partner of adjacent) {
+      ordered.push(partner)
+      remaining.delete(partner)
+    }
+  }
+  return ordered
+}
+
 export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions & { collapseDistant?: boolean; compactDepth?: number; expandedBlockIds?: Iterable<string> }): FamilyLayout {
   const displayData = options.collapseDistant ? compactFamily(data, options.compactDepth ?? 2, new Set(options.expandedBlockIds)) : data
   const graph = buildFamilyBlocks(displayData), nodes: Record<string, NodePosition> = {}, unions: FamilyLayout['unions'] = {}, continuations: FamilyContinuation[] = [], paths: RoutedPath[] = []
@@ -20,7 +59,7 @@ export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions &
   const generations = [...row.keys()].sort((a, b) => a - b); let primary = 72; let extent = 480
   for (const generation of generations) {
     let secondary = 240
-    for (const id of row.get(generation) ?? []) {
+    for (const id of orderGeneration(row.get(generation) ?? [], displayData)) {
       if (placed.has(id)) continue
       placed.add(id)
       const metrics = cardMetrics(card(displayData, id))
