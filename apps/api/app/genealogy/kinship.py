@@ -146,7 +146,11 @@ def _resolve_affinity(
     if _is_female(centre.sex) and _is_female(target.sex):
         for centre_spouse in partners.get(centre_id, set()):
             for target_spouse in partners.get(target_id, set()):
-                if len(parents.get(centre_spouse, set()) & parents.get(target_spouse, set())) >= 2:
+                if (
+                    _is_male(people.get(centre_spouse, KinshipPerson(centre_spouse, None, False)).sex)
+                    and _is_male(people.get(target_spouse, KinshipPerson(target_spouse, None, False)).sex)
+                    and len(parents.get(centre_spouse, set()) & parents.get(target_spouse, set())) >= 2
+                ):
                     return KinshipResult("ятровка", "affinity", "confirmed", "жёны двух родных братьев")
     return None
 
@@ -235,19 +239,20 @@ def _sibling_result(sex: str | None, parent_ids: set[UUID], people: dict[UUID, K
 
 def _collateral_result(sex: str | None, centre_distance: int, target_distance: int) -> KinshipResult:
     if centre_distance == target_distance:
-        if centre_distance == 2:
-            prefix = "двоюродный"
-        elif centre_distance == 3:
-            prefix = "троюродный"
-        else:
-            prefix = f"{centre_distance}-юродный"
+        prefix = _cousin_prefix(centre_distance)
         label = _gendered_adjective_noun(sex, prefix, "брат", "сестра", "сиблинг")
         return KinshipResult(label, "blood-collateral", "confirmed", "ближайший общий предок")
     if abs(centre_distance - target_distance) == 1:
         if target_distance < centre_distance:
-            label = _gendered(sex, "дядя", "тётя", "дядя или тётя")
+            if target_distance == 1:
+                label = _gendered(sex, "дядя", "тётя", "дядя или тётя")
+            else:
+                label = _gendered_adjective_noun(sex, _cousin_prefix(target_distance), "дядя", "тётя", "дядя или тётя")
         else:
-            label = _gendered(sex, "племянник", "племянница", "племянник или племянница")
+            if centre_distance == 1:
+                label = _gendered(sex, "племянник", "племянница", "племянник или племянница")
+            else:
+                label = _gendered_adjective_noun(sex, _cousin_prefix(centre_distance), "племянник", "племянница", "племянник или племянница")
         return KinshipResult(label, "blood-collateral", "confirmed", "ближайший общий предок")
     return KinshipResult(
         label="родственник по боковой линии",
@@ -259,6 +264,14 @@ def _collateral_result(sex: str | None, centre_distance: int, target_distance: i
 
 def _pra(count: int) -> str:
     return "пра-" * count
+
+
+def _cousin_prefix(distance: int) -> str:
+    if distance == 2:
+        return "двоюродный"
+    if distance == 3:
+        return "троюродный"
+    return f"{distance}-юродный"
 
 
 def _gendered(sex: str | None, male: str, female: str, unknown: str) -> str:

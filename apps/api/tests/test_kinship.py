@@ -97,6 +97,25 @@ def test_blood_resolves_aunt_and_nephew_and_unknown_sex():
     assert unknown_result is not None and unknown_result.label == "родитель"
 
 
+def test_blood_qualifies_distant_aunt_or_uncle_by_cousin_degree():
+    ancestor = person()
+    centre_parent, centre_grandparent = person(), person()
+    target_parent, centre, target = person(), person("female"), person("male")
+
+    result = resolve(
+        centre,
+        target,
+        [
+            link(ancestor, centre_grandparent), link(centre_grandparent, centre_parent), link(centre_parent, centre),
+            link(ancestor, target_parent), link(target_parent, target),
+        ],
+    )
+
+    assert result is not None
+    assert result.label == "двоюродный дядя"
+    assert result.kind == "blood-collateral"
+
+
 def test_blood_returns_descriptive_result_for_equally_short_incompatible_paths():
     first_ancestor, second_ancestor = person(), person()
     centre_parent, target_parent = person(), person()
@@ -164,6 +183,25 @@ def test_affinity_resolves_yatrovka_only_for_wives_of_two_brothers():
     )
 
     assert result is not None and result.label == "ятровка"
+
+
+def test_affinity_does_not_call_wives_of_two_sisters_yatrovkas():
+    father, mother = person("male"), person("female")
+    first_sister, second_sister = person("female"), person("female")
+    centre, target = person("female"), person("female")
+
+    result = resolve(
+        centre,
+        target,
+        [link(father, first_sister), link(mother, first_sister), link(father, second_sister), link(mother, second_sister)],
+        father,
+        mother,
+        first_sister,
+        second_sister,
+        unions=[union(centre, first_sister), union(target, second_sister)],
+    )
+
+    assert result is None
 
 
 def test_affinity_uses_descriptive_result_when_required_sex_is_unknown():
