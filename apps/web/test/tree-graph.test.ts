@@ -149,6 +149,7 @@ it('uses a person’s known relationship to the centre instead of a generic labe
       { id: 'father', display_name: 'Пётр', sex: 'M', birth_label: null, death_label: null, is_hidden: false, is_root: false },
       { id: 'mother', display_name: 'Анна', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
       { id: 'root', display_name: 'Мария', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: true },
+      { id: 'sister', display_name: 'Ксения', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
       { id: 'spouse', display_name: 'Иван', sex: 'M', birth_label: null, death_label: null, is_hidden: false, is_root: false },
       { id: 'daughter', display_name: 'Вера', sex: 'F', birth_label: null, death_label: null, is_hidden: false, is_root: false },
     ],
@@ -160,6 +161,8 @@ it('uses a person’s known relationship to the centre instead of a generic labe
     parent_links: [
       { parent_id: 'father', child_id: 'root', union_id: 'parents', relationship_type: 'biological' },
       { parent_id: 'mother', child_id: 'root', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'father', child_id: 'sister', union_id: 'parents', relationship_type: 'biological' },
+      { parent_id: 'mother', child_id: 'sister', union_id: 'parents', relationship_type: 'biological' },
       { parent_id: 'root', child_id: 'daughter', union_id: 'couple', relationship_type: 'biological' },
       { parent_id: 'spouse', child_id: 'daughter', union_id: 'couple', relationship_type: 'biological' },
     ],
@@ -171,6 +174,7 @@ it('uses a person’s known relationship to the centre instead of a generic labe
   const role = (id: string) => graph.shadowRoot?.querySelector(`.card[data-person-id="${id}"] .eyebrow`)?.textContent
   expect(role('father')).toBe('ОТЕЦ')
   expect(role('mother')).toBe('МАТЬ')
+  expect(role('sister')).toBe('СЕСТРА')
   expect(role('spouse')).toBe('МУЖ')
   expect(role('daughter')).toBe('ДОЧЬ')
 })
