@@ -63,6 +63,11 @@ cd ../web
 npm install
 cd ../..
 docker compose up
+
+Для повседневной локальной разработки удобнее нативный режим: `scripts/dev-native.sh`.
+Он оставляет Docker только для PostgreSQL и локального S3, а API и web запускает из
+ваших виртуального окружения и `node_modules`. Перед первым запуском установите
+зависимости API и web, затем создайте `.env` из `.env.example`.
 ```
 
 Для генерации хеша пароля используйте `apps/api/.venv/bin/python -c "from argon2 import PasswordHasher; print(PasswordHasher().hash('ваш-пароль'))"`, а для секрета сессии — `apps/api/.venv/bin/python -c "import secrets; print(secrets.token_urlsafe(48))"`. В локальной разработке укажите `CATS_HOUSE_ENVIRONMENT=development`; перед публикацией — `production`, где cookie владельца всегда требует HTTPS.
