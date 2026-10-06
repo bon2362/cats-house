@@ -71,7 +71,7 @@ it('places a family hub on the partners’ branch, not below their cards', () =>
   expect(layout.paths.find((path) => path.kind === 'parent-child' && path.from === 'parents')?.d).toContain(`M ${layout.unions.parents.x} ${layout.unions.parents.y}`)
 })
 
-it('does not render a dangling hub or downward segment for a union without visible children', async () => {
+it('renders one hub on the line of a visible pair even when the pair has no visible children', async () => {
   await import('../src/pages/tree-graph')
   const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData }
   graph.graph = {
@@ -83,33 +83,35 @@ it('does not render a dangling hub or downward segment for a union without visib
   document.body.append(graph)
   await (graph as unknown as { updateComplete: Promise<void> }).updateComplete
 
-  expect(graph.shadowRoot?.querySelectorAll('circle.hub')).toHaveLength(0)
-  expect(graph.shadowRoot?.querySelector('path.partner')?.getAttribute('d')?.split(' M ')).toHaveLength(1)
+  const hubs = graph.shadowRoot?.querySelectorAll('circle.hub') ?? []
+  const line = graph.shadowRoot?.querySelector('path.partner')?.getAttribute('d') ?? ''
+  const [, x1, y, , x2] = line.split(' ').map(Number)
+  expect(hubs).toHaveLength(1)
+  expect(line.split(' M ')).toHaveLength(1)
+  expect(Number(hubs[0].getAttribute('cy'))).toBe(y)
+  expect(Number(hubs[0].getAttribute('cx'))).toBeGreaterThan(x1)
+  expect(Number(hubs[0].getAttribute('cx'))).toBeLessThan(x2)
+  expect(graph.shadowRoot?.querySelectorAll('path.parent-child')).toHaveLength(0)
 })
 
-it('emits the family block id when a continuation is clicked', async () => {
+it('emits the person whose hidden relatives should be shown when a continuation is clicked', async () => {
   await import('../src/pages/tree-graph')
-  const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData; collapseDistant: boolean }
+  const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData }
   graph.graph = {
     people: [
       { id: 'root', display_name: 'Root', sex: null, birth_label: null, death_label: null, is_hidden: false, is_root: true },
       { id: 'child', display_name: 'Child', sex: null, birth_label: null, death_label: null, is_hidden: false, is_root: false },
-      { id: 'grandchild', display_name: 'Grandchild', sex: null, birth_label: null, death_label: null, is_hidden: false, is_root: false },
-      { id: 'great-grandchild', display_name: 'Great grandchild', sex: null, birth_label: null, death_label: null, is_hidden: false, is_root: false },
     ], unions: [], partner_links: [],
-    parent_links: [
-      { parent_id: 'root', child_id: 'child', relationship_type: 'biological' },
-      { parent_id: 'child', child_id: 'grandchild', relationship_type: 'biological' },
-      { parent_id: 'grandchild', child_id: 'great-grandchild', relationship_type: 'biological' },
-    ], links: [], relation_path: null,
+    parent_links: [{ parent_id: 'root', child_id: 'child', relationship_type: 'biological' }], links: [], relation_path: null,
+    continuations: [{ source_person_id: 'child', count: 3, direction: 'down' }, { source_person_id: 'child', count: 1, direction: 'up' }],
   }
-  graph.collapseDistant = true
-  const emitted = new Promise<CustomEvent<{ blockId: string }>>((resolve) => graph.addEventListener('continuation-select', (event) => resolve(event as CustomEvent<{ blockId: string }>), { once: true }))
+  const emitted = new Promise<CustomEvent<{ personId: string; direction: string }>>((resolve) => graph.addEventListener('continuation-select', (event) => resolve(event as CustomEvent<{ personId: string; direction: string }>), { once: true }))
   document.body.append(graph)
   await (graph as unknown as { updateComplete: Promise<void> }).updateComplete
 
-  ;(graph.shadowRoot?.querySelector('button.continuation') as HTMLButtonElement).click()
-  expect((await emitted).detail.blockId).toBe('parent:grandchild')
+  expect([...(graph.shadowRoot?.querySelectorAll('button.continuation') ?? [])].map((item) => item.textContent?.trim()).sort()).toEqual(['↑ Показать ещё 1', '↓ Показать ещё 3'])
+  ;(graph.shadowRoot?.querySelector('button.continuation[data-direction="up"]') as HTMLButtonElement).click()
+  expect((await emitted).detail).toEqual({ personId: 'child', direction: 'up' })
 })
 
 it('keeps siblings together beneath their union without overlapping any cards', () => {
@@ -376,4 +378,23 @@ it('routes a third union around intervening partner cards horizontally', () => {
 
   expect(layout.unions.third.x).toBeLessThan(layout.nodes.anna.x)
   expect(third?.d).toContain(`H ${layout.unions.third.x}`)
+})
+
+it('marks a death date as such when the birth date is unknown', async () => {
+  await import('../src/pages/tree-graph')
+  const graph = document.createElement('cats-tree-graph') as HTMLElement & { graph: TreeGraphData }
+  graph.graph = {
+    ...familyGraph,
+    people: [
+      { ...familyGraph.people[0], birth_label: null, death_label: '20 MAR 2004' },
+      { ...familyGraph.people[1], birth_label: '1901', death_label: null },
+    ],
+    parent_links: [familyGraph.parent_links[0]],
+  }
+  document.body.append(graph)
+  await (graph as unknown as { updateComplete: Promise<void> }).updateComplete
+
+  const date = (id: string) => graph.shadowRoot?.querySelector(`.card[data-person-id="${id}"] .date`)?.textContent
+  expect(date('parent')).toBe('? – 20 MAR 2004')
+  expect(date('child')).toBe('1901')
 })

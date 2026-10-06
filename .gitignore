@@ -12,3 +12,7 @@ __pycache__/
 *.egg-info/
 node_modules/
 dist/
+
+# Playwright output
+apps/web/test-results/
+apps/web/playwright-report/

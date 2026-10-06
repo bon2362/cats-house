@@ -86,22 +86,150 @@ it('finds a person in all-family mode and makes the chosen result the centre', a
   expect(fetchMock).toHaveBeenLastCalledWith('/api/v1/tree/boris?mode=all&depth=2')
 })
 
-it('expands the selected continuation block in place without loading a new tree', async () => {
-  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => graph })
+const person = (id: string, name: string, root = false) => ({ id, display_name: name, sex: null, birth_label: null, death_label: null, is_hidden: false, is_root: root })
+// What the API returns for Анна in close mode: undirected counts of hidden parents/children.
+const closeGraph = {
+  ...graph,
+  people: [...graph.people, person('clara', 'Клара')],
+  unions: [{ id: 'boris-clara', partner_one_id: 'boris', partner_two_id: 'clara', union_type: 'marriage' }],
+  continuations: [{ source_person_id: 'anna', count: 1 }, { source_person_id: 'boris', count: 2 }, { source_person_id: 'clara', count: 1 }],
+}
+const fullGraph = {
+  ...closeGraph,
+  people: [...closeGraph.people, person('olga', 'Ольга'), person('denis', 'Денис'), person('egor', 'Егор'), person('far', 'Фаина')],
+  parent_links: [
+    ...graph.parent_links,
+    { parent_id: 'olga', child_id: 'anna', relationship_type: 'biological' },
+    { parent_id: 'boris', child_id: 'denis', union_id: 'boris-clara', relationship_type: 'biological' },
+    { parent_id: 'clara', child_id: 'denis', union_id: 'boris-clara', relationship_type: 'biological' },
+    { parent_id: 'boris', child_id: 'egor', relationship_type: 'biological' },
+    { parent_id: 'egor', child_id: 'far', relationship_type: 'biological' },
+  ],
+  continuations: [],
+}
+const treeFetch = () => vi.fn((url: string) => Promise.resolve({ ok: true, json: async () => (url.includes('mode=all') ? fullGraph : closeGraph) }))
+const settle = async (element: HTMLElement) => {
+  for (let index = 0; index < 4; index += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  }
+}
+const treeOf = (element: HTMLElement) => element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement
+const cardIds = (element: HTMLElement) => [...(treeOf(element).shadowRoot?.querySelectorAll('.card') ?? [])].map((card) => card.getAttribute('data-person-id')).sort()
+const buttons = (element: HTMLElement) => [...(treeOf(element).shadowRoot?.querySelectorAll('button.continuation') ?? [])].map((item) => `${item.getAttribute('data-person-id')}:${item.textContent?.trim()}`).sort()
+const button = (element: HTMLElement, personId: string, direction: 'up' | 'down') => treeOf(element).shadowRoot?.querySelector(`button.continuation[data-person-id="${personId}"][data-direction="${direction}"]`) as HTMLButtonElement
+const openClose = async (url = '/tree?person=anna&mode=close&depth=2') => {
+  const fetchMock = treeFetch()
+  vi.stubGlobal('fetch', fetchMock)
+  history.replaceState({}, '', url)
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await settle(element)
+  // Loading fits the graph on the next animation frame; let that happen before measuring.
+  await new Promise((resolve) => requestAnimationFrame(resolve))
+  await settle(element)
+  return { element, fetchMock }
+}
+
+it('shows hidden parents above a card and hidden children below it from the first render', async () => {
+  const { element, fetchMock } = await openClose()
+
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/tree/anna?mode=close&depth=2')
+  expect(fetchMock).toHaveBeenCalledWith('/api/v1/tree/anna?mode=all&depth=2')
+  expect(cardIds(element)).toEqual(['anna', 'boris', 'clara'])
+  expect(buttons(element)).toEqual(['anna:↑ Показать ещё 1', 'boris:↓ Показать ещё 2', 'clara:↓ Показать ещё 1'])
+})
+
+it('reveals only the hidden children of the clicked person in close mode without changing the centre or mode', async () => {
+  const { element, fetchMock } = await openClose()
+  const requests = fetchMock.mock.calls.length
+
+  button(element, 'boris', 'down').click()
+  await settle(element)
+
+  expect(fetchMock).toHaveBeenCalledTimes(requests)
+  expect(new URLSearchParams(window.location.search).get('person')).toBe('anna')
+  expect(new URLSearchParams(window.location.search).get('mode')).toBe('close')
+  expect(new URLSearchParams(window.location.search).get('expand')).toBe('down:boris')
+  expect(cardIds(element)).toEqual(['anna', 'boris', 'clara', 'denis', 'egor'])
+  expect(buttons(element)).toEqual(['anna:↑ Показать ещё 1', 'egor:↓ Показать ещё 1'])
+  expect(element.shadowRoot?.querySelector('.focus-label strong')?.textContent).toBe('Анна')
+})
+
+it('reveals only the hidden parents when the button above a card is clicked', async () => {
+  const { element } = await openClose()
+
+  button(element, 'anna', 'up').click()
+  await settle(element)
+
+  expect(new URLSearchParams(window.location.search).get('expand')).toBe('up:anna')
+  expect(cardIds(element)).toEqual(['anna', 'boris', 'clara', 'olga'])
+  expect(buttons(element)).toEqual(['boris:↓ Показать ещё 2', 'clara:↓ Показать ещё 1'])
+})
+
+it('keeps every already shown card at the same screen point and marks the revealed ones', async () => {
+  const { element } = await openClose()
+  const screen = () => {
+    const transform = element.shadowRoot?.querySelector('.scene')?.getAttribute('style') ?? ''
+    const [, panX, panY, zoom] = transform.match(/translate\(([-0-9.e]+)px,([-0-9.e]+)px\) scale\(([-0-9.e]+)\)/)!.map(Number)
+    return Object.fromEntries([...(treeOf(element).shadowRoot?.querySelectorAll('.card') ?? [])].map((card) => {
+      const style = (card as HTMLElement).style
+      return [card.getAttribute('data-person-id'), `${Math.round(panX + parseFloat(style.left) * zoom)}:${Math.round(panY + parseFloat(style.top) * zoom)}`]
+    }))
+  }
+  const before = screen()
+
+  button(element, 'anna', 'up').click()
+  await settle(element)
+  const after = screen()
+
+  expect({ anna: after.anna, boris: after.boris, clara: after.clara }).toEqual(before)
+  expect([...(treeOf(element).shadowRoot?.querySelectorAll('.card.revealed') ?? [])].map((card) => card.getAttribute('data-person-id'))).toEqual(['olga'])
+})
+
+it('restores revealed relatives from the URL, including links that do not name a direction', async () => {
+  expect(cardIds((await openClose('/tree?person=anna&mode=close&depth=2&expand=down:boris')).element)).toEqual(['anna', 'boris', 'clara', 'denis', 'egor'])
+  document.body.replaceChildren()
+  expect(cardIds((await openClose('/tree?person=anna&mode=close&depth=2&expand=anna')).element)).toEqual(['anna', 'boris', 'clara', 'olga'])
+})
+
+it('expands a continuation in all-family mode from data already loaded', async () => {
+  const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ ...fullGraph, continuations: [] }) })
+  vi.stubGlobal('fetch', fetchMock)
+  history.replaceState({}, '', '/tree?person=anna&mode=all&depth=2')
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await settle(element)
+  expect(cardIds(element)).not.toContain('far')
+  const requests = fetchMock.mock.calls.length
+
+  ;((element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement).shadowRoot?.querySelector('button.continuation') as HTMLButtonElement).click()
+  await settle(element)
+
+  expect(cardIds(element)).toContain('far')
+  expect(fetchMock).toHaveBeenCalledTimes(requests)
+})
+
+it('does not capture the pointer on press, so a plain click still reaches the pressed button', async () => {
+  const fetchMock = treeFetch()
   vi.stubGlobal('fetch', fetchMock)
   const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string }
   element.rootId = 'anna'
   document.body.append(element)
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  ;([...(element.shadowRoot?.querySelectorAll('.modes button') ?? [])].find((button) => button.textContent === 'Вся семья') as HTMLButtonElement).click()
-  await new Promise((resolve) => setTimeout(resolve, 0))
-  const tree = element.shadowRoot?.querySelector('cats-tree-graph') as HTMLElement & { expandedBlockIds: string[] }
-  const requestsBeforeExpansion = fetchMock.mock.calls.length
-  tree.dispatchEvent(new CustomEvent('continuation-select', { detail: { blockId: 'parent:anna' }, bubbles: true, composed: true }))
-  await (element as unknown as { updateComplete: Promise<void> }).updateComplete
+  await settle(element)
+  const stage = element.shadowRoot?.querySelector('.stage') as HTMLElement
+  const capture = vi.fn()
+  stage.setPointerCapture = capture
+  const pressed = treeOf(element).shadowRoot?.querySelector('button.continuation') as HTMLButtonElement
+  const pointer = (type: string, x: number) => Object.assign(new Event(type, { bubbles: true, composed: true }), { pointerId: 7, clientX: x, clientY: 10 })
 
-  expect(tree.expandedBlockIds).toContain('parent:anna')
-  expect(fetchMock).toHaveBeenCalledTimes(requestsBeforeExpansion)
+  pressed.dispatchEvent(pointer('pointerdown', 10))
+  stage.dispatchEvent(pointer('pointermove', 13))
+  expect(capture).not.toHaveBeenCalled()
+  stage.dispatchEvent(pointer('pointermove', 30))
+  expect(capture).toHaveBeenCalledWith(7)
 })
 
 it('shows a recoverable Russian error when graph loading fails', async () => {
