@@ -1,5 +1,7 @@
 import { LitElement, css, html } from 'lit'
 
+import { searchOwnerPeople } from './owner-api'
+import './pages/person-editor'
 import { ru } from './locales/ru'
 import './pages/home-page'
 import type { PersonSummary } from './pages/home-page'
@@ -9,7 +11,7 @@ import './pages/login-page'
 import { GUEST, fetchOwnerStatus, logoutOwner, type OwnerStatus } from './owner-session'
 
 type ConnectionState = 'loading' | 'ready' | 'unavailable'
-type SearchPerson = PersonSummary
+type SearchPerson = PersonSummary & { is_archived?: boolean }
 type PublicPerson = {
   id: string
   display_name: string
@@ -22,7 +24,7 @@ type PublicPerson = {
 }
 
 export class CatsHouseApp extends LitElement {
-  static properties = { connectionState: { state: true }, query: { state: true }, people: { state: true }, cataloguePeople: { state: true }, activeResult: { state: true }, person: { state: true }, ownerStatus: { state: true }, ownerError: { state: true } }
+  static properties = { connectionState: { state: true }, query: { state: true }, people: { state: true }, cataloguePeople: { state: true }, activeResult: { state: true }, person: { state: true }, ownerStatus: { state: true }, ownerError: { state: true }, hiddenPersonId: { state: true } }
   private declare connectionState: ConnectionState
   private declare query: string
   private declare people: SearchPerson[]
@@ -31,16 +33,18 @@ export class CatsHouseApp extends LitElement {
   private declare person: PublicPerson | null
   private declare ownerStatus: OwnerStatus
   private declare ownerError: string
+  private declare hiddenPersonId: string | null
   private searchTimer: number | undefined
 
   constructor() {
     super()
-    this.connectionState = 'loading'; this.query = ''; this.people = []; this.cataloguePeople = []; this.activeResult = -1; this.person = null; this.ownerStatus = GUEST; this.ownerError = ''
+    this.connectionState = 'loading'; this.query = ''; this.people = []; this.cataloguePeople = []; this.activeResult = -1; this.person = null; this.ownerStatus = GUEST; this.ownerError = ''; this.hiddenPersonId = null
   }
 
   static styles = css`
     :host { display:block; min-height:100vh; background:var(--paper,var(--cats-paper)); }
     header { display:flex; min-height:4rem; align-items:center; gap:2rem; border-bottom:1px solid var(--border,var(--cats-line)); padding:0 1.875rem; }
+    .hidden-person { padding:2rem 1rem; max-width:60rem; margin:0 auto; }
     .brand { flex:none; color:var(--ink,var(--cats-ink)); font-family:var(--font-serif,Georgia,serif); font-size:1.4rem; letter-spacing:-.04em; text-decoration:none; white-space:nowrap; }
     nav { display:flex; align-self:stretch; align-items:center; gap:1.5rem; }
     nav a { color:var(--text-2,var(--cats-muted)); font-size:.875rem; font-weight:600; text-decoration:none; }
@@ -67,12 +71,16 @@ export class CatsHouseApp extends LitElement {
   disconnectedCallback() { super.disconnectedCallback(); if (this.searchTimer) window.clearTimeout(this.searchTimer) }
 
   private async loadCatalogue() { try { const response = await fetch('/api/v1/people'); const data = response.ok ? await response.json() : []; this.cataloguePeople = Array.isArray(data) ? data : [] } catch { this.cataloguePeople = [] } }
-  private async loadPersonFromPath() { const match = window.location.pathname.match(/^\/people\/([^/]+)$/); if (!match) return; const response = await fetch(`/api/v1/people/${match[1]}`); this.person = response.ok ? await response.json() : null }
+  private async loadPersonFromPath() { const match = window.location.pathname.match(/^\/people\/([^/]+)$/); if (!match) return; const response = await fetch(`/api/v1/people/${match[1]}`); this.person = response.ok ? await response.json() : null; this.hiddenPersonId = response.status === 404 ? match[1] : null }
   private async loadOwnerStatus() { this.ownerStatus = await fetchOwnerStatus() }
   /** The header shows a guest only after the server confirms the session is closed. */
   private async signOut() {
     this.ownerError = ''
-    if (await logoutOwner()) this.ownerStatus = { ...this.ownerStatus, authenticated: false }
+    if (await logoutOwner()) {
+      this.ownerStatus = { ...this.ownerStatus, authenticated: false }
+      this.people = []; this.activeResult = -1
+      if (this.searchTimer) window.clearTimeout(this.searchTimer)
+    }
     else this.ownerError = 'Не удалось выйти. Проверьте связь и попробуйте ещё раз.'
   }
   private ownerControls() {
@@ -83,7 +91,7 @@ export class CatsHouseApp extends LitElement {
   private async checkPublicApi() { try { const response = await fetch('/api/v1/health'); if (!response.ok) throw new Error('Public API is unavailable'); this.connectionState = 'ready' } catch { this.connectionState = 'unavailable' } }
 
   private searchPeople(event: InputEvent) { this.query = (event.target as HTMLInputElement).value; this.people = []; this.activeResult = -1; if (this.searchTimer) window.clearTimeout(this.searchTimer); if (!this.query.trim()) return; this.searchTimer = window.setTimeout(() => void this.requestSearch(), 150) }
-  private async requestSearch() { try { const response = await fetch(`/api/v1/people?query=${encodeURIComponent(this.query)}`); const data = response.ok ? await response.json() : []; this.people = Array.isArray(data) ? data.slice(0, 6) : [] } catch { this.people = [] } }
+  private async requestSearch() { if (this.ownerStatus.authenticated) { const session = this.ownerStatus; const result = await searchOwnerPeople(this.query); if (this.ownerStatus !== session) return; this.people = result.ok ? result.value.slice(0, 6) : []; return } try { const response = await fetch(`/api/v1/people?query=${encodeURIComponent(this.query)}`); const data = response.ok ? await response.json() : []; this.people = Array.isArray(data) ? data.slice(0, 6) : [] } catch { this.people = [] } }
   private onSearchKeydown(event: KeyboardEvent) { if (event.key === 'Escape') { this.people = []; this.activeResult = -1; return }; if (!this.people.length) return; if (event.key === 'ArrowDown' || event.key === 'ArrowUp') { event.preventDefault(); const direction = event.key === 'ArrowDown' ? 1 : -1; this.activeResult = (this.activeResult + direction + this.people.length) % this.people.length }; if (event.key === 'Enter' && this.activeResult >= 0) window.location.assign(`/people/${this.people[this.activeResult].id}`) }
   private initials(person: SearchPerson) { return person.display_name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase() }
 
@@ -92,9 +100,9 @@ export class CatsHouseApp extends LitElement {
     return html`<header>
       <a class="brand" href="/">${ru.brand}</a><nav aria-label="Основная навигация"><a class=${!isTreePage ? 'active' : ''} href="/">Все люди</a>${isTreePage && treeRootId ? html`<a class="active" href="/tree?person=${treeRootId}">Дерево</a>` : ''}</nav>
       <div class="header-right"><section class="search" aria-label="Поиск по семье"><input type="search" placeholder="Найти человека по имени или фамилии" .value=${this.query} @input=${this.searchPeople} @keydown=${this.onSearchKeydown} />
-        ${this.people.length ? html`<div class="search-menu" role="listbox">${this.people.map((person,index) => html`<a class="search-result ${index === this.activeResult ? 'active' : ''}" href="/people/${person.id}" role="option" aria-selected=${index === this.activeResult}><span class="monogram">${this.initials(person)}</span><span><span class="result-name">${person.display_name}</span><span class="result-meta">${person.years ?? 'годы неизвестны'}${person.parents_label ? ` · родители: ${person.parents_label}` : ''}</span></span></a>`)}<a class="all-results" href="/?q=${encodeURIComponent(this.query)}">Все результаты →</a></div>` : ''}
+        ${this.people.length ? html`<div class="search-menu" role="listbox">${this.people.map((person,index) => html`<a class="search-result ${index === this.activeResult ? 'active' : ''}" href="/people/${person.id}" role="option" aria-selected=${index === this.activeResult}><span class="monogram">${this.initials(person)}</span><span><span class="result-name">${person.display_name}</span><span class="result-meta">${person.years ?? 'годы неизвестны'}${person.parents_label ? ` · родители: ${person.parents_label}` : ''}</span>${person.is_archived ? html`<span class="result-meta">скрыт</span>` : ''}</span></a>`)}<a class="all-results" href="/?q=${encodeURIComponent(this.query)}">Все результаты →</a></div>` : ''}
       </section>${this.ownerControls()}</div></header>
-      ${isLoginPage ? html`<cats-login-page .status=${this.ownerStatus} .next=${new URLSearchParams(window.location.search).get('next')} @owner-logout-request=${this.signOut}></cats-login-page>` : isTreePage ? html`<cats-tree-page .rootId=${treeRootId}></cats-tree-page>` : this.person ? html`<cats-person-card .person=${this.person}></cats-person-card>` : html`<cats-house-home .connectionState=${this.connectionState} .people=${this.cataloguePeople}></cats-house-home>`}`
+      ${isLoginPage ? html`<cats-login-page .status=${this.ownerStatus} .next=${new URLSearchParams(window.location.search).get('next')} @owner-logout-request=${this.signOut}></cats-login-page>` : isTreePage ? html`<cats-tree-page .rootId=${treeRootId} .isOwner=${this.ownerStatus.authenticated}></cats-tree-page>` : !this.person && this.hiddenPersonId && this.ownerStatus.authenticated ? html`<section class="hidden-person"><cats-person-editor .personId=${this.hiddenPersonId} .standalone=${true} @person-visibility-changed=${() => this.loadPersonFromPath()}></cats-person-editor></section>` : this.person ? html`<cats-person-card .person=${this.person} .isOwner=${this.ownerStatus.authenticated} @person-changed=${() => this.loadPersonFromPath()}></cats-person-card>` : html`<cats-house-home .connectionState=${this.connectionState} .people=${this.cataloguePeople}></cats-house-home>`}`
   }
 }
 

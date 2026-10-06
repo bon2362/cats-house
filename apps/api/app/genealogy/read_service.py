@@ -5,15 +5,8 @@ from uuid import UUID
 from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
+from app.genealogy.dates import format_date_ru
 from app.models.genealogy import Event, Media, MediaLink, ParentChild, Person, Union
-
-
-_MONTHS_RU = {
-    "JAN": "января", "FEB": "февраля", "MAR": "марта", "APR": "апреля",
-    "MAY": "мая", "JUN": "июня", "JUL": "июля", "AUG": "августа",
-    "SEP": "сентября", "OCT": "октября", "NOV": "ноября", "DEC": "декабря",
-}
-_QUALIFIERS_RU = {"ABT": "ок.", "EST": "ок.", "CAL": "ок.", "BEF": "до", "AFT": "после"}
 
 
 @dataclass(frozen=True)
@@ -34,19 +27,7 @@ def normalize_public_name(value: str) -> str:
 
 
 def format_public_date(value: str | None) -> str | None:
-    if not value:
-        return None
-    words = value.strip().split()
-    if not words:
-        return None
-    qualifier = _QUALIFIERS_RU.get(words[0].upper())
-    if qualifier:
-        words = words[1:]
-    if len(words) == 3 and words[1].upper() in _MONTHS_RU and words[0].isdigit() and words[2].isdigit():
-        rendered = f"{int(words[0])} {_MONTHS_RU[words[1].upper()]} {words[2]}"
-    else:
-        rendered = " ".join(words)
-    return f"{qualifier} {rendered}" if qualifier else rendered
+    return format_date_ru(value)
 
 
 def _year(value: str | None) -> str | None:
@@ -80,7 +61,8 @@ def search_people(session: Session, query: str) -> list[Person]:
     statement = select(Person).where(Person.is_archived.is_(False))
     if normalized_query:
         normalized_name = func.replace(func.lower(Person.display_name), "ё", "е")
-        statement = statement.where(normalized_name.contains(normalized_query))
+        normalized_birth_surname = func.replace(func.lower(func.coalesce(Person.birth_surname, "")), "ё", "е")
+        statement = statement.where(or_(normalized_name.contains(normalized_query), normalized_birth_surname.contains(normalized_query)))
     statement = statement.order_by(Person.display_name).limit(500 if not normalized_query else 20)
     return list(session.scalars(statement))
 

@@ -30,3 +30,16 @@ test('on a phone-width screen the header keeps the owner link fully on screen', 
   expect(box!.x + box!.width).toBeLessThanOrEqual(390)
   expect(headerWidth).toBeLessThanOrEqual(390)
 })
+
+test('the owner opens the editor for a real person and cancels without saving', async ({ page }) => {
+  test.skip(!password, 'Set CATS_HOUSE_E2E_OWNER_PASSWORD to run the owner editor check.')
+  await page.goto('/login?next=%2Fpeople%2Fca7750a8-ecfe-4cf4-a58c-9e9806656913')
+  await page.getByLabel('Пароль').fill(password!)
+  await page.getByRole('button', { name: 'Войти' }).click()
+  await expect(page).toHaveURL(/\/people\/ca7750a8/)
+
+  await page.getByRole('button', { name: 'Изменить' }).click()
+  await expect(page.getByLabel('Фамилия')).toHaveValue(/.+/)
+  await page.getByRole('button', { name: 'Отмена' }).click()
+  await expect(page.getByRole('button', { name: 'Изменить' })).toBeVisible()
+})

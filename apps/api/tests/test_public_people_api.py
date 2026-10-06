@@ -162,3 +162,25 @@ def test_public_card_includes_only_published_attached_media(client, database_ses
     assert response.json()["media"] == [
         {"id": str(published.id), "original_filename": "published.jpg", "url": "https://media.example.test/media/published.jpg"}
     ]
+
+
+def test_person_page_carries_birth_surname_sex_and_russian_event_labels(client, database_session):
+    person = add_person(database_session, "Анна Иванова")
+    person.sex, person.birth_surname = "F", "Петрова"
+    database_session.add(Event(person_id=person.id, event_type="BIRT", date_text="BEF MAR 1944", date_qualifier="before", place="Тула"))
+    database_session.commit()
+
+    body = client.get(f"/api/v1/people/{person.id}").json()
+
+    assert body["birth_surname"] == "Петрова" and body["sex"] == "F"
+    assert body["events"] == [{"event_type": "BIRT", "date_text": "BEF MAR 1944", "date_label_ru": "до марта 1944", "place": "Тула"}]
+    assert body["birth_label"] == "до марта 1944"
+
+
+def test_public_search_finds_the_birth_surname_but_never_hidden_people(client, database_session):
+    visible = add_person(database_session, "Анна Иванова")
+    hidden = add_person(database_session, "Мария Смирнова", archived=True)
+    visible.birth_surname = hidden.birth_surname = "Ёлкина"
+    database_session.commit()
+
+    assert client.get("/api/v1/people?query=елкина").json() == [{"id": str(visible.id), "display_name": "Анна Иванова"}]

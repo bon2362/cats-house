@@ -5,6 +5,7 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
+from app.genealogy.dates import format_date_ru
 from app.genealogy.read_service import featured_person, get_public_person, normalize_public_name, public_events, public_family, public_person_media, public_person_summary, search_people
 
 router = APIRouter()
@@ -23,6 +24,8 @@ class PersonSearchResponse(BaseModel):
 class EventResponse(BaseModel):
     event_type: str
     date_text: str | None
+    date_label_ru: str | None = None
+    place: str | None = None
 
 
 class PublicMediaResponse(BaseModel):
@@ -32,6 +35,8 @@ class PublicMediaResponse(BaseModel):
 
 
 class PersonResponse(PersonSearchResponse):
+    birth_surname: str | None = None
+    sex: str | None = None
     biography: str | None
     events: list[EventResponse]
     parents: list[PersonSearchResponse]
@@ -60,10 +65,11 @@ def get_person(person_id: UUID, request: Request, session: Session = Depends(get
         raise HTTPException(status_code=404, detail="Человек не найден.")
     parents, children, partners = public_family(session, person.id)
     return PersonResponse(
-        id=person.id,
-        display_name=normalize_public_name(person.display_name),
+        **public_person_summary(session, person).__dict__,
+        birth_surname=person.birth_surname,
+        sex=person.sex,
         biography=person.biography,
-        events=[EventResponse(event_type=event.event_type, date_text=event.date_text) for event in public_events(session, person.id)],
+        events=[EventResponse(event_type=event.event_type, date_text=event.date_text, date_label_ru=format_date_ru(event.date_text), place=event.place) for event in public_events(session, person.id)],
         parents=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in parents],
         children=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in children],
         partners=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in partners],

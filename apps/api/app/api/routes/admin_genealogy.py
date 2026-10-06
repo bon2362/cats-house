@@ -1,29 +1,94 @@
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import OwnerSession, require_owner
 from app.db.session import get_session
-from app.genealogy.write_service import (
-    archive_person,
-    create_parent_child_link,
-    create_person_event,
-    create_union,
-    rename_person,
-)
+from app.genealogy.dates import DateError, DatePoint, DateValue
+from app.genealogy.person_editing import LifeEventInput, PersonEdit, PersonEditError, editable_person, owner_search, update_person
+from app.genealogy.write_service import archive_person, create_parent_child_link, create_person_event, create_union, restore_person
 
 router = APIRouter()
 
 
-class PersonUpdateRequest(BaseModel):
-    display_name: str = Field(min_length=1, max_length=512)
+class DatePointBody(BaseModel):
+    year: int
+    month: int | None = None
+    day: int | None = None
 
 
-class PersonUpdateResponse(BaseModel):
-    id: UUID
-    display_name: str
+class DateBody(DatePointBody):
+    qualifier: Literal["exact", "about", "before", "after", "between"]
+    end: DatePointBody | None = None
+
+
+class LifeEventBody(BaseModel):
+    date: DateBody | None = None
+    place: str | None = None
+    date_text_keep: bool = False
+
+
+class DeathBody(LifeEventBody):
+    status: Literal["unknown", "deceased"]
+
+
+class PersonEditBody(BaseModel):
+    surname: str | None = None
+    given_name: str | None = None
+    patronymic: str | None = None
+    birth_surname: str | None = None
+    sex: Literal["M", "F"] | None = None
+    birth: LifeEventBody | None = None
+    death: DeathBody
+
+
+def _date(body: DateBody | None) -> DateValue | None:
+    if body is None:
+        return None
+    end = DatePoint(body.end.year, body.end.month, body.end.day) if body.end else None
+    return DateValue(body.qualifier, DatePoint(body.year, body.month, body.day), end)
+
+
+def _life(body: LifeEventBody | None) -> LifeEventInput | None:
+    return None if body is None else LifeEventInput(_date(body.date), body.place, body.date_text_keep)
+
+
+@router.get("/admin/people")
+def search_people_for_owner(query: str = Query(default=""), owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> list[dict]:
+    return owner_search(session, query)
+
+
+@router.get("/admin/people/{person_id}")
+def read_person_for_owner(person_id: UUID, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
+    try:
+        return editable_person(session, person_id)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+
+
+@router.patch("/admin/people/{person_id}")
+def save_person(person_id: UUID, body: PersonEditBody, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
+    edit = PersonEdit(
+        surname=body.surname, given_name=body.given_name, patronymic=body.patronymic, birth_surname=body.birth_surname,
+        sex=body.sex, birth=_life(body.birth), death_status=body.death.status, death=_life(body.death),
+    )
+    try:
+        return update_person(session, person_id, edit, owner.email)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except (PersonEditError, DateError) as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
+
+
+@router.post("/admin/people/{person_id}/restore", status_code=204)
+def restore(person_id: UUID, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> None:
+    try:
+        restore_person(session, person_id, owner.email)
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
 
 
 class PersonEventCreateRequest(BaseModel):
@@ -55,20 +120,6 @@ class ParentChildCreateRequest(BaseModel):
 
 class ParentChildCreateResponse(BaseModel):
     id: UUID
-
-
-@router.patch("/admin/people/{person_id}", response_model=PersonUpdateResponse)
-def update_person(
-    person_id: UUID,
-    body: PersonUpdateRequest,
-    owner: OwnerSession = Depends(require_owner),
-    session: Session = Depends(get_session),
-) -> PersonUpdateResponse:
-    try:
-        person = rename_person(session, person_id, body.display_name, owner.email)
-    except LookupError as error:
-        raise HTTPException(status_code=404, detail=str(error)) from error
-    return PersonUpdateResponse(id=person.id, display_name=person.display_name)
 
 
 @router.post("/admin/people/{person_id}/archive", status_code=204)

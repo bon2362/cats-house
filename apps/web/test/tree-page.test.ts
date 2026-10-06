@@ -2,6 +2,24 @@ import { afterEach, expect, it, vi } from 'vitest'
 
 import '../src/pages/tree-page'
 
+it('offers editing in the inspector only to the owner', async () => {
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => graph }))
+  const element = document.createElement('cats-tree-page') as HTMLElement & { rootId: string; isOwner: boolean; updateComplete: Promise<boolean> }
+  element.rootId = 'anna'
+  document.body.append(element)
+  await new Promise((resolve) => setTimeout(resolve, 0))
+  const tree = element.shadowRoot!.querySelector('cats-tree-graph')!
+  tree.dispatchEvent(new CustomEvent('person-select', { detail: { personId: 'boris' }, bubbles: true, composed: true }))
+  await element.updateComplete
+  expect(element.shadowRoot!.querySelector('a[href="/people/boris?edit=1"]')).toBeNull()
+  element.isOwner = true
+  await element.updateComplete
+  expect(element.shadowRoot!.querySelector('a[href="/people/boris?edit=1"]')?.textContent).toBe('Изменить')
+  element.isOwner = false
+  await element.updateComplete
+  expect(element.shadowRoot!.querySelector('a[href="/people/boris?edit=1"]')).toBeNull()
+})
+
 const graph = {
   people: [
     { id: 'anna', display_name: 'Анна', sex: 'F', birth_label: '1900', death_label: null, is_hidden: false, is_root: true },

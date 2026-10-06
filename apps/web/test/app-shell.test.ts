@@ -191,4 +191,94 @@ describe('cats-house-app', () => {
     expect(element.shadowRoot?.querySelector('.owner-state')).not.toBeNull()
     expect(element.shadowRoot?.querySelector('[role="alert"]')?.textContent).toContain('Не удалось выйти')
   })
+
+  it('searches with the owner endpoint and marks hidden people', async () => {
+    vi.useFakeTimers()
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/auth/status')) return Promise.resolve(new Response(JSON.stringify({ authenticated: true, totp_required: false })))
+      if (url.startsWith('/api/v1/admin/people?query=')) return Promise.resolve(new Response(JSON.stringify([{ id: 'h1', display_name: 'Анна Скрытая', years: null, is_archived: true }])))
+      return Promise.resolve(new Response('[]'))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const element = await renderApp()
+    await vi.runAllTimersAsync()
+    const search = element.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!
+
+    search.value = 'Анна'
+    search.dispatchEvent(new Event('input'))
+    await vi.runAllTimersAsync()
+    await element.updateComplete
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/v1/admin/people?query=%D0%90%D0%BD%D0%BD%D0%B0')
+    expect(element.shadowRoot!.querySelector('.search-result')?.textContent).toContain('скрыт')
+  })
+
+  it('opens the editor for a hidden person when the owner is signed in', async () => {
+    history.pushState({}, '', '/people/h1')
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/auth/status')) return Promise.resolve(new Response(JSON.stringify({ authenticated: true, totp_required: false })))
+      if (url.endsWith('/api/v1/people/h1')) return Promise.resolve(new Response('{}', { status: 404 }))
+      if (url.endsWith('/api/v1/admin/people/h1')) return Promise.resolve(new Response(JSON.stringify({ id: 'h1', display_name: 'Анна', is_archived: true, surname: null, given_name: 'Анна', patronymic: null, birth_surname: null, sex: null, birth: null, death: { status: 'unknown', date: null, date_text: null, place: null } })))
+      return Promise.resolve(new Response('[]'))
+    }))
+    const element = await renderApp()
+    await settled(element)
+    await settled(element)
+
+    const editor = element.shadowRoot!.querySelector('cats-person-editor') as HTMLElement & { personId: string; standalone: boolean }
+    expect(editor.personId).toBe('h1')
+    expect(editor.standalone).toBe(true)
+  })
+
+  it('does not treat a server error as a hidden person', async () => {
+    history.pushState({}, '', '/people/h1')
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/auth/status')) return Promise.resolve(new Response(JSON.stringify({ authenticated: true, totp_required: false })))
+      if (url.endsWith('/api/v1/people/h1')) return Promise.resolve(new Response('{}', { status: 500 }))
+      return Promise.resolve(new Response('[]'))
+    }))
+    const element = await renderApp()
+    await settled(element)
+    await settled(element)
+    expect(element.shadowRoot!.querySelector('cats-person-editor')).toBeNull()
+  })
+
+  it.each([false, true])('clears owner search results on logout, including pending=%s', async (pending) => {
+    vi.useFakeTimers()
+    let completeSearch!: (response: Response) => void
+    const hidden = [{ id: 'h1', display_name: 'Анна Скрытая', years: null, is_archived: true }]
+    vi.stubGlobal('fetch', vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input)
+      if (url.endsWith('/api/v1/auth/status')) return Promise.resolve(new Response(JSON.stringify({ authenticated: true, totp_required: false })))
+      if (url.endsWith('/api/v1/auth/logout') && init?.method === 'POST') return Promise.resolve(new Response(null, { status: 204 }))
+      if (url.startsWith('/api/v1/admin/people?query=')) return new Promise<Response>((resolve) => { completeSearch = resolve })
+      return Promise.resolve(new Response('[]'))
+    }))
+    const element = await renderApp()
+    await vi.runAllTimersAsync()
+    const search = element.shadowRoot!.querySelector<HTMLInputElement>('input[type="search"]')!
+    search.value = 'Анна'
+    search.dispatchEvent(new Event('input'))
+    await vi.runAllTimersAsync()
+    if (!pending) {
+      completeSearch(new Response(JSON.stringify(hidden)))
+      await vi.runAllTimersAsync()
+      await element.updateComplete
+      expect(element.shadowRoot!.querySelector('.search-result')?.textContent).toContain('Анна Скрытая')
+    }
+    ;(element.shadowRoot!.querySelector('button.owner-logout') as HTMLButtonElement).click()
+    await vi.runAllTimersAsync()
+    await element.updateComplete
+    expect(element.shadowRoot!.querySelector('.owner-link')).not.toBeNull()
+    expect(element.shadowRoot!.querySelector('.search-result')).toBeNull()
+    if (pending) {
+      completeSearch(new Response(JSON.stringify(hidden)))
+      await vi.runAllTimersAsync()
+      await element.updateComplete
+      expect(element.shadowRoot!.querySelector('.search-result')).toBeNull()
+    }
+  })
 })

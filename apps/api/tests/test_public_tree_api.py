@@ -4,7 +4,7 @@ import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from app.models.genealogy import ImportRun, Media, MediaLink, ParentChild, Person, Union
+from app.models.genealogy import Event, ImportRun, Media, MediaLink, ParentChild, Person, Union
 
 
 @pytest.fixture
@@ -410,3 +410,16 @@ def test_tree_rejects_depth_below_one(client, database_session):
     response = client.get(f"/api/v1/tree/{person.id}?mode=close&depth=0")
 
     assert response.status_code == 422
+
+
+def test_tree_labels_are_russian_for_approximate_dates(client, database_session):
+    run = ImportRun(original_filename="family.ged", sha256="0" * 64, state="applied", normalized_payload={}, counts={})
+    database_session.add(run)
+    database_session.flush()
+    person = create_person(database_session, run, "Анна")
+    database_session.add(Event(person_id=person.id, event_type="BIRT", date_text="ABT 1900", date_qualifier="about"))
+    database_session.commit()
+
+    people = client.get(f"/api/v1/tree/{person.id}?mode=close").json()["people"]
+
+    assert next(item for item in people if item["id"] == str(person.id))["birth_label"] == "ок. 1900"

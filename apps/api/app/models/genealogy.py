@@ -31,7 +31,11 @@ class Person(Base):
 
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
     import_run_id: Mapped[UUID] = mapped_column(ForeignKey("import_runs.id"))
-    display_name: Mapped[str] = mapped_column(String(512))
+    display_name: Mapped[str] = mapped_column(String(767))
+    surname: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    given_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    patronymic: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    birth_surname: Mapped[str | None] = mapped_column(String(255), nullable=True)
     source_uid: Mapped[str | None] = mapped_column(String(255), nullable=True)
     sex: Mapped[str | None] = mapped_column(String(32), nullable=True)
     biography: Mapped[str | None] = mapped_column(Text, nullable=True)
