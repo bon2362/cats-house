@@ -25,6 +25,7 @@ it('routes spouse parents through their child and the child union', () => {
   expect(lineage.some((path) => path.from.id === 'spouse-parents' && path.to.id === 'spouse')).toBe(true)
   expect(lineage.some((path) => path.from.id === 'spouse' && path.to.id === 'root')).toBe(true)
   expect(layout.nodes.root.width).toBeGreaterThan(layout.nodes.spouse.width)
+  expect(layout.bands.map((band) => band.generation)).toEqual(expect.arrayContaining([-1, 0]))
 })
 
 it('uses the union hub as the only parent-child source and keeps every endpoint real', () => {

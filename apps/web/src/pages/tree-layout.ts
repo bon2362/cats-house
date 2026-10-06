@@ -62,5 +62,15 @@ export function layoutFamilyBlocks(data: TreeGraphData, options: LayoutOptions):
       }
     }
   }
-  return { nodes, unions, paths, bands: [], width: options.direction === 'vertical' ? extent : primary + 72, height: options.direction === 'vertical' ? primary + 72 : extent }
+  const width = options.direction === 'vertical' ? extent : primary + 72
+  const height = options.direction === 'vertical' ? primary + 72 : extent
+  const bands: GenerationBand[] = generations.map((generation, index) => {
+    const members = Object.values(nodes).filter((node) => node.generation === generation)
+    const start = Math.min(...members.map((node) => options.direction === 'vertical' ? node.y : node.x)) - 66
+    const end = Math.max(...members.map((node) => (options.direction === 'vertical' ? node.y + node.height : node.x + node.width))) + 66
+    return options.direction === 'vertical'
+      ? { generation, label: generation < 0 ? `ПРЕДКИ · ${-generation}` : generation === 0 ? 'ЦЕНТР' : `ПОТОМКИ · ${generation}`, x: 0, y: start, width, height: end - start, alternate: index % 2 === 1 }
+      : { generation, label: generation < 0 ? `ПРЕДКИ · ${-generation}` : generation === 0 ? 'ЦЕНТР' : `ПОТОМКИ · ${generation}`, x: start, y: 0, width: end - start, height, alternate: index % 2 === 1 }
+  })
+  return { nodes, unions, paths, bands, width, height }
 }
