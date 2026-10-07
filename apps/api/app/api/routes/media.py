@@ -1,107 +1,90 @@
+from urllib.parse import quote
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import OwnerSession, require_owner
+from app.api.dependencies import OwnerSession, optional_owner, require_owner
 from app.db.session import get_session
-from app.media.service import media_key
-from app.models.genealogy import ChangeLog, Event, Media, MediaLink, Person
+from app.genealogy.person_editing import PersonEditError
+from app.media.library import MAX_MEDIA_BYTES, delete_media, media_file, owner_media, set_biography, set_portrait, update_media, upload
 
 router = APIRouter()
 
-ALLOWED_MEDIA_TYPES = {"image/jpeg", "image/png", "application/pdf"}
-MAX_MEDIA_BYTES = 10 * 1024 * 1024
+
+class MediaChangeBody(BaseModel):
+    caption: str | None = None
+    date_label: str | None = None
+    is_published: bool | None = None
 
 
-class MediaResponse(BaseModel):
-    id: UUID
-    original_filename: str
-    is_published: bool
+class PortraitBody(BaseModel):
+    media_id: UUID | None = None
 
 
-class PublicMediaResponse(BaseModel):
-    id: UUID
-    original_filename: str
-    url: str
+class BiographyBody(BaseModel):
+    biography: str | None = None
 
 
-class MediaLinkCreateRequest(BaseModel):
-    person_id: UUID | None = None
-    event_id: UUID | None = None
+def _errors(call):
+    try:
+        return call()
+    except LookupError as error:
+        raise HTTPException(status_code=404, detail=str(error)) from error
+    except PersonEditError as error:
+        raise HTTPException(status_code=422, detail=str(error)) from error
 
 
-class MediaLinkCreateResponse(BaseModel):
-    id: UUID
+@router.get("/admin/people/{person_id}/media")
+def list_owner_media(person_id: UUID, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> list[dict]:
+    return _errors(lambda: owner_media(session, person_id))
 
 
-@router.post("/admin/media", status_code=status.HTTP_201_CREATED, response_model=MediaResponse)
-async def upload_media(
-    request: Request,
-    file: UploadFile = File(...),
-    _: OwnerSession = Depends(require_owner),
-    session: Session = Depends(get_session),
-) -> MediaResponse:
-    if not file.filename or file.content_type not in ALLOWED_MEDIA_TYPES:
-        raise HTTPException(status_code=422, detail="Разрешены JPEG, PNG и PDF.")
+@router.post("/admin/people/{person_id}/media", status_code=201)
+async def upload_person_media(person_id: UUID, file: UploadFile = File(...), owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
     content = await file.read(MAX_MEDIA_BYTES + 1)
-    if len(content) > MAX_MEDIA_BYTES:
-        raise HTTPException(status_code=422, detail="Файл не должен превышать 10 МБ.")
-    key = media_key(file.filename)
-    request.app.state.media_storage.put(key, content, file.content_type)
-    media = Media(storage_key=key, media_type=file.content_type, original_filename=file.filename)
-    session.add(media)
-    session.commit()
-    session.refresh(media)
-    return MediaResponse(id=media.id, original_filename=media.original_filename, is_published=media.is_published)
+    return _errors(lambda: upload(session, person_id, file.filename or "", content, owner.email))
 
 
-@router.patch("/admin/media/{media_id}/publish", status_code=204)
-def publish_media(media_id: UUID, _: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> None:
-    media = session.get(Media, media_id)
-    if media is None:
-        raise HTTPException(status_code=404, detail="Материал не найден.")
-    media.is_published = True
-    session.commit()
+@router.patch("/admin/media/{media_id}")
+def change_media(media_id: UUID, body: MediaChangeBody, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
+    return _errors(lambda: update_media(session, media_id, body.model_dump(exclude_unset=True), owner.email))
 
 
-@router.post("/admin/media/{media_id}/links", status_code=status.HTTP_201_CREATED, response_model=MediaLinkCreateResponse)
-def link_media(
-    media_id: UUID,
-    body: MediaLinkCreateRequest,
-    owner: OwnerSession = Depends(require_owner),
-    session: Session = Depends(get_session),
-) -> MediaLinkCreateResponse:
-    if (body.person_id is None) == (body.event_id is None):
-        raise HTTPException(status_code=422, detail="Укажите человека или событие.")
-    media = session.get(Media, media_id)
-    if media is None:
-        raise HTTPException(status_code=404, detail="Материал не найден.")
-    if body.person_id is not None and session.get(Person, body.person_id) is None:
-        raise HTTPException(status_code=404, detail="Человек не найден.")
-    if body.event_id is not None and session.get(Event, body.event_id) is None:
-        raise HTTPException(status_code=404, detail="Событие не найдено.")
-    link = MediaLink(media_id=media_id, person_id=body.person_id, event_id=body.event_id)
-    session.add(link)
-    session.flush()
-    session.add(
-        ChangeLog(
-            entity_type="media_link",
-            entity_id=link.id,
-            owner_email=owner.email,
-            before={},
-            after={"media_id": str(media_id), "person_id": str(body.person_id) if body.person_id else None, "event_id": str(body.event_id) if body.event_id else None},
-        )
-    )
-    session.commit()
-    session.refresh(link)
-    return MediaLinkCreateResponse(id=link.id)
+@router.delete("/admin/media/{media_id}", status_code=204)
+def remove_media(media_id: UUID, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> None:
+    _errors(lambda: delete_media(session, media_id, owner.email))
 
 
-@router.get("/media/{media_id}", response_model=PublicMediaResponse)
-def get_media(media_id: UUID, request: Request, session: Session = Depends(get_session)) -> PublicMediaResponse:
-    media = session.get(Media, media_id)
-    if media is None or not media.is_published:
-        raise HTTPException(status_code=404, detail="Материал не найден.")
-    return PublicMediaResponse(id=media.id, original_filename=media.original_filename, url=request.app.state.media_storage.public_url(media.storage_key))
+@router.put("/admin/people/{person_id}/portrait")
+def choose_portrait(person_id: UUID, body: PortraitBody, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
+    return _errors(lambda: set_portrait(session, person_id, body.media_id, owner.email))
+
+
+@router.patch("/admin/people/{person_id}/biography")
+def save_biography(person_id: UUID, body: BiographyBody, owner: OwnerSession = Depends(require_owner), session: Session = Depends(get_session)) -> dict:
+    return _errors(lambda: set_biography(session, person_id, body.biography, owner.email))
+
+
+def _deliver(session: Session, media_id: UUID, kind: str, owner: OwnerSession | None) -> Response:
+    found = media_file(session, media_id, kind, owner is not None)
+    if found is None:
+        raise HTTPException(status_code=404, detail="Файл не найден.")
+    content, media_type, filename = found
+    return Response(content, media_type=media_type, headers={
+        "Content-Disposition": f"inline; filename*=UTF-8''{quote(filename)}",
+        "X-Content-Type-Options": "nosniff",
+        "Cache-Control": "private, max-age=300",
+    })
+
+
+@router.get("/media/{media_id}/file")
+def media_file_route(media_id: UUID, owner: OwnerSession | None = Depends(optional_owner), session: Session = Depends(get_session)) -> Response:
+    return _deliver(session, media_id, "file", owner)
+
+
+@router.get("/media/{media_id}/preview")
+def media_preview_route(media_id: UUID, owner: OwnerSession | None = Depends(optional_owner), session: Session = Depends(get_session)) -> Response:
+    return _deliver(session, media_id, "preview", owner)

@@ -137,7 +137,15 @@ def public_person_media(session: Session, person_id: UUID) -> list[Media]:
         session.scalars(
             select(Media)
             .join(MediaLink, MediaLink.media_id == Media.id)
-            .where(MediaLink.person_id == person_id, Media.is_published.is_(True))
-            .order_by(Media.original_filename)
+            .where(MediaLink.person_id == person_id, Media.is_published.is_(True), Media.is_deleted.is_(False))
+            .order_by(Media.created_at, Media.id)
         )
     )
+
+
+def public_portrait(session: Session, person: Person) -> Media | None:
+    """The person's portrait when guests may see it."""
+    if person.portrait_media_id is None:
+        return None
+    media = session.get(Media, person.portrait_media_id)
+    return media if media is not None and media.is_published and not media.is_deleted else None

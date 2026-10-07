@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session
 
 from app.db.session import get_session
 from app.genealogy.dates import format_date_ru
-from app.genealogy.read_service import featured_person, get_public_person, normalize_public_name, public_events, public_family, public_person_media, public_person_summary, public_siblings, search_people
+from app.genealogy.read_service import featured_person, get_public_person, normalize_public_name, public_events, public_family, public_person_media, public_person_summary, public_portrait, public_siblings, search_people
+from app.media.library import media_view
 
 router = APIRouter()
 
@@ -31,7 +32,17 @@ class EventResponse(BaseModel):
 class PublicMediaResponse(BaseModel):
     id: UUID
     original_filename: str
-    url: str
+    media_type: str
+    caption: str | None = None
+    date_label: str | None = None
+    file_url: str
+    preview_url: str | None = None
+
+
+class PortraitResponse(BaseModel):
+    id: UUID
+    preview_url: str
+    file_url: str
 
 
 class PersonResponse(PersonSearchResponse):
@@ -44,6 +55,7 @@ class PersonResponse(PersonSearchResponse):
     partners: list[PersonSearchResponse]
     siblings: list[PersonSearchResponse] = []
     media: list[PublicMediaResponse]
+    portrait: PortraitResponse | None = None
 
 
 @router.get("/people", response_model=list[PersonSearchResponse], response_model_exclude_none=True)
@@ -75,12 +87,10 @@ def get_person(person_id: UUID, request: Request, session: Session = Depends(get
         children=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in children],
         partners=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in partners],
         siblings=[PersonSearchResponse(id=related.id, display_name=normalize_public_name(related.display_name)) for related in public_siblings(session, person.id)],
-        media=[
-            PublicMediaResponse(
-                id=item.id,
-                original_filename=item.original_filename,
-                url=request.app.state.media_storage.public_url(item.storage_key),
-            )
-            for item in public_person_media(session, person.id)
-        ],
+        media=[PublicMediaResponse(**media_view(session, item, owner=False)) for item in public_person_media(session, person.id)],
+        portrait=(
+            PortraitResponse(id=portrait.id, preview_url=f"/api/v1/media/{portrait.id}/preview", file_url=f"/api/v1/media/{portrait.id}/file")
+            if (portrait := public_portrait(session, person))
+            else None
+        ),
     )

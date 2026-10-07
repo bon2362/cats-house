@@ -14,7 +14,6 @@ from alembic.config import Config
 from app.core.config import Settings
 from app.db.session import create_session_factory
 from app.exports.service import restore_archive
-from app.media.service import S3MediaStorage
 
 
 def main() -> int:
@@ -29,17 +28,17 @@ def main() -> int:
     config.set_main_option("sqlalchemy.url", settings.database_url)
     config.set_main_option("script_location", str(ROOT / "apps" / "api" / "alembic"))
     command.upgrade(config, "head")
-    storage = S3MediaStorage(settings)
+    contents: dict[str, bytes] = {}
     for item in archive.get("media_manifest", []):
         backup_file = item.get("backup_file")
         if not backup_file:
-            raise ValueError("В архиве нет сохранённого файла медиа.")
+            continue  # a manifest entry without stored bytes (e.g. an old S3 record) is restored without a file
         source = args.archive.parent / backup_file
         if not source.is_file():
             raise ValueError("Файл медиа из архива не найден.")
-        storage.put(item["storage_key"], source.read_bytes(), item["media_type"])
+        contents[item["archive_id"]] = source.read_bytes()
     with create_session_factory(settings.database_url)() as session:
-        restore_archive(session, archive)
+        restore_archive(session, archive, contents)
     print(f"Восстановлено: люди {archive['counts']['people']}; события {archive['counts']['events']}")
     return 0
 

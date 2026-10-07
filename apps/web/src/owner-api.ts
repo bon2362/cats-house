@@ -6,6 +6,7 @@ export type EditablePerson = {
   id: string; display_name: string; is_archived: boolean
   surname: string | null; given_name: string | null; patronymic: string | null; birth_surname: string | null
   sex: 'M' | 'F' | null; birth: LifeEventView | null; death: LifeEventView & { status: 'unknown' | 'deceased' }
+  biography?: string | null
 }
 export type LifeEventInput = { date: DateValue | null; place: string | null; date_text_keep: boolean }
 export type PersonEditPayload = {
@@ -22,6 +23,10 @@ export type FamilyOverview = { parents: PersonRef[]; unions: UnionDetails[]; chi
 export type UnionEditPayload = { marriage: { date: DateValue | null; place: string | null; date_text_keep?: boolean } | null; divorced: boolean; divorce_date: DateValue | null; divorce_date_text_keep?: boolean }
 export type AddRelativePayload = { relation: Relation; person: PersonEditPayload | null; existing_id: string | null; union_id: string | null }
 export type AddRelativeResult = { relation: Relation; created: boolean; person: EditablePerson }
+/** A file as guests see it; the public page omits empty fields, so they are optional. */
+export type MediaItem = { id: string; original_filename: string; media_type: string; caption?: string | null; date_label?: string | null; file_url: string; preview_url?: string | null }
+export type OwnerMediaItem = MediaItem & { is_published: boolean; is_portrait: boolean }
+export type MediaChanges = { caption?: string | null; date_label?: string | null; is_published?: boolean }
 export type ApiResult<T> = { ok: true; value: T } | { ok: false; message: string }
 
 const UNAVAILABLE = 'Сервер недоступен. Попробуйте позже.'
@@ -34,7 +39,10 @@ async function request<T>(url: string, init?: RequestInit): Promise<ApiResult<T>
     return { ok: false, message: UNAVAILABLE }
   }
   if (response.status === 401) return { ok: false, message: 'Войдите как владелец, чтобы изменять данные.' }
-  if (response.status === 404) return { ok: false, message: 'Человек не найден.' }
+  if (response.status === 404) {
+    const detail = await response.json().then((data) => data?.detail, () => null)
+    return { ok: false, message: typeof detail === 'string' ? detail : 'Человек не найден.' }
+  }
   if (response.status === 422) {
     const detail = await response.json().then((data) => data?.detail, () => null)
     return { ok: false, message: typeof detail === 'string' ? detail : 'Проверьте заполнение полей.' }
@@ -59,3 +67,13 @@ export const removeParent = (childId: string, parentId: string) => request<null>
 export const moveChild = (parentId: string, childId: string, unionId: string | null) => request<null>(`/api/v1/admin/people/${parentId}/children/${childId}/move`, json('POST', { union_id: unionId }))
 export const updateUnion = (unionId: string, payload: UnionEditPayload) => request<{ union_id: string; marriage: LifeEventView | null; divorce: UnionDetails['divorce'] }>(`/api/v1/admin/unions/${unionId}`, json('PATCH', payload))
 export const removeUnion = (unionId: string) => request<null>(`/api/v1/admin/unions/${unionId}`, { method: 'DELETE' })
+export const fetchOwnerMedia = (personId: string) => request<OwnerMediaItem[]>(`/api/v1/admin/people/${personId}/media`)
+export const uploadMedia = (personId: string, file: File) => {
+  const body = new FormData()
+  body.append('file', file)
+  return request<OwnerMediaItem>(`/api/v1/admin/people/${personId}/media`, { method: 'POST', body })
+}
+export const updateMedia = (mediaId: string, changes: MediaChanges) => request<OwnerMediaItem>(`/api/v1/admin/media/${mediaId}`, json('PATCH', changes))
+export const deleteMedia = (mediaId: string) => request<null>(`/api/v1/admin/media/${mediaId}`, { method: 'DELETE' })
+export const setPortrait = (personId: string, mediaId: string | null) => request<{ portrait_media_id: string | null }>(`/api/v1/admin/people/${personId}/portrait`, json('PUT', { media_id: mediaId }))
+export const saveBiography = (personId: string, biography: string) => request<{ biography: string | null }>(`/api/v1/admin/people/${personId}/biography`, json('PATCH', { biography }))

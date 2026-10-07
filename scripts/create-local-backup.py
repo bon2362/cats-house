@@ -12,8 +12,7 @@ sys.path.insert(0, str(ROOT / "apps" / "api"))
 
 from app.core.config import Settings
 from app.db.session import create_session_factory
-from app.exports.service import build_archive, export_gedcom
-from app.media.service import S3MediaStorage
+from app.exports.service import build_archive, export_gedcom, media_contents
 
 
 def main() -> int:
@@ -27,13 +26,14 @@ def main() -> int:
     settings = Settings()
     with create_session_factory(settings.database_url)() as session:
         archive = build_archive(session)
-        storage = S3MediaStorage(settings)
+        # Files live in the database; each one is written next to the JSON and referenced from the manifest.
         media_dir = args.output / f"cats-house-{stamp}-media"
-        for item in archive["media_manifest"]:
+        manifest = {item["archive_id"]: item for item in archive["media_manifest"]}
+        for archive_id, content in media_contents(session):
             media_dir.mkdir(exist_ok=True)
-            filename = f"{item['archive_id']}.bin"
-            (media_dir / filename).write_bytes(storage.get(item["storage_key"]))
-            item["backup_file"] = f"{media_dir.name}/{filename}"
+            filename = f"{archive_id}.bin"
+            (media_dir / filename).write_bytes(content)
+            manifest[archive_id]["backup_file"] = f"{media_dir.name}/{filename}"
         (args.output / f"cats-house-{stamp}.json").write_text(json.dumps(archive, ensure_ascii=False, indent=2), encoding="utf-8")
         (args.output / f"cats-house-{stamp}.ged").write_bytes(export_gedcom(session))
     print(f"Создана копия: {stamp}; люди: {archive['counts']['people']}; события: {archive['counts']['events']}")

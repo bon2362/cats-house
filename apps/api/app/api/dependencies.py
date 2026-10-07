@@ -14,6 +14,11 @@ def is_owner(request: Request) -> bool:
     return isinstance(session_email, str) and compare_digest(session_email, request.app.state.settings.owner_email)
 
 
+def optional_owner(request: Request) -> OwnerSession | None:
+    """The owner when signed in, otherwise ``None`` (for pages guests may read too)."""
+    return OwnerSession(email=request.app.state.settings.owner_email) if is_owner(request) else None
+
+
 def require_owner(request: Request) -> OwnerSession:
     if not is_owner(request):
         raise HTTPException(

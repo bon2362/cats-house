@@ -97,6 +97,7 @@ def editable_person(session: Session, person_id: UUID) -> dict:
         "is_archived": person.is_archived,
         **{name: getattr(person, name) for name in NAME_FIELDS},
         "sex": person.sex,
+        "biography": person.biography,
         "birth": _event_view(births[0] if births else None),
         "death": {"status": "deceased" if deaths else "unknown", **(death or {"date": None, "date_text": None, "place": None})},
     }

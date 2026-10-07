@@ -68,3 +68,64 @@ def test_archive_keeps_name_parts_and_people_created_on_the_site(postgres_url):
         restored = target.query(Person).filter_by(display_name="Анна Петровна Иванова").one()
         assert (restored.surname, restored.given_name, restored.patronymic, restored.birth_surname) == ("Иванова", "Анна", "Петровна", "Сидорова")
         assert target.query(Union).count() == 1
+
+
+def test_archive_round_trip_keeps_files_captions_and_portrait(postgres_url):
+    import io
+
+    from PIL import Image
+
+    from app.exports.service import media_contents
+    from app.media.library import set_portrait, update_media, upload
+
+    buffer = io.BytesIO()
+    Image.new("RGB", (640, 480), "green").save(buffer, "JPEG")
+    photo_bytes = buffer.getvalue()
+    engine = create_engine(postgres_url)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Session(engine) as source:
+        person = Person(display_name="Анна")
+        source.add(person)
+        source.commit()
+        photo = upload(source, person.id, "anna.jpg", photo_bytes, "owner@example.test")["id"]
+        document = upload(source, person.id, "doc.pdf", b"%PDF-1.4 doc", "owner@example.test")["id"]
+        update_media(source, photo, {"caption": "Свадьба", "date_label": "1950"}, "owner@example.test")
+        update_media(source, document, {"is_published": False}, "owner@example.test")
+        set_portrait(source, person.id, photo, "owner@example.test")
+        archive = build_archive(source)
+        contents = dict(media_contents(source))
+    engine.dispose()
+
+    target_engine = create_engine(postgres_url)
+    Base.metadata.drop_all(target_engine)
+    Base.metadata.create_all(target_engine)
+    with Session(target_engine) as target:
+        restore_archive(target, archive, contents)
+        restored = {item.original_filename: item for item in target.query(Media)}
+        assert restored["anna.jpg"].content == photo_bytes and restored["anna.jpg"].preview
+        assert (restored["anna.jpg"].caption, restored["anna.jpg"].date_label) == ("Свадьба", "1950")
+        assert restored["doc.pdf"].content == b"%PDF-1.4 doc" and restored["doc.pdf"].is_published is False
+        assert target.query(Person).one().portrait_media_id == restored["anna.jpg"].id
+    target_engine.dispose()
+
+
+def test_restore_keeps_a_file_whose_preview_cannot_be_made(postgres_url):
+    import io
+
+    from PIL import Image
+
+    buffer = io.BytesIO()
+    Image.new("1", (15000, 12000)).save(buffer, "PNG")
+    archive = {
+        "format": "cats-house-archive-v1", "people": [], "events": [], "counts": {},
+        "media_manifest": [{"archive_id": "m1", "storage_key": None, "media_type": "image/png", "original_filename": "huge.png", "is_published": True}],
+    }
+    engine = create_engine(postgres_url)
+    Base.metadata.drop_all(engine)
+    Base.metadata.create_all(engine)
+    with Session(engine) as target:
+        restore_archive(target, archive, {"m1": buffer.getvalue()})
+        restored = target.query(Media).one()
+        assert restored.content == buffer.getvalue() and restored.preview is None
+    engine.dispose()

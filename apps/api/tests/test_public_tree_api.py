@@ -112,30 +112,28 @@ def test_all_mode_returns_entire_connected_public_component(client, database_ses
     }
 
 
-def test_tree_exposes_only_a_published_person_photo(client, database_session):
+def test_tree_shows_only_a_visible_portrait(client, database_session):
     run = ImportRun(original_filename="family.ged", sha256="p" * 64, state="applied", normalized_payload={}, counts={})
     database_session.add(run)
     database_session.flush()
     root = create_person(database_session, run, "Анна")
     child = create_person(database_session, run, "Борис")
-    published = Media(storage_key="media/anna.jpg", media_type="image/jpeg", original_filename="anna.jpg", is_published=True)
-    private = Media(storage_key="media/boris.jpg", media_type="image/jpeg", original_filename="boris.jpg", is_published=False)
-    database_session.add_all((published, private, ParentChild(parent_id=root.id, child_id=child.id)))
+    portrait = Media(media_type="image/jpeg", original_filename="anna.jpg", is_published=True, content=b"\xff\xd8\xff", preview=b"\xff\xd8\xff")
+    not_portrait = Media(media_type="image/jpeg", original_filename="boris.jpg", is_published=True, content=b"\xff\xd8\xff", preview=b"\xff\xd8\xff")
+    database_session.add_all((portrait, not_portrait, ParentChild(parent_id=root.id, child_id=child.id)))
     database_session.flush()
-    database_session.add_all((MediaLink(media_id=published.id, person_id=root.id), MediaLink(media_id=private.id, person_id=child.id)))
+    database_session.add_all((MediaLink(media_id=portrait.id, person_id=root.id), MediaLink(media_id=not_portrait.id, person_id=child.id)))
+    root.portrait_media_id = portrait.id
     database_session.commit()
 
-    class FakeStorage:
-        def public_url(self, key: str) -> str:
-            return f"https://media.example.test/{key}"
+    people = {person["id"]: person for person in client.get(f"/api/v1/tree/{root.id}?mode=descendants&depth=1").json()["people"]}
+    portrait.is_published = False
+    database_session.commit()
+    hidden = {person["id"]: person for person in client.get(f"/api/v1/tree/{root.id}?mode=descendants&depth=1").json()["people"]}
 
-    client.app.state.media_storage = FakeStorage()
-    response = client.get(f"/api/v1/tree/{root.id}?mode=descendants&depth=1")
-
-    assert response.status_code == 200
-    people = {person["id"]: person for person in response.json()["people"]}
-    assert people[str(root.id)]["photo_url"] == "https://media.example.test/media/anna.jpg"
+    assert people[str(root.id)]["photo_url"] == f"/api/v1/media/{portrait.id}/preview"
     assert people[str(child.id)]["photo_url"] is None
+    assert hidden[str(root.id)]["photo_url"] is None
 
 
 def test_descendant_tree_respects_depth(client, database_session):

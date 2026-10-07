@@ -234,6 +234,10 @@ describe('cats-house-app', () => {
     const section = element.shadowRoot!.querySelector('cats-relative-section') as HTMLElement & { personId: string }
     expect(section?.personId).toBe('h1')
     expect((element.shadowRoot!.querySelector('cats-family-editor') as HTMLElement & { personId: string } | null)?.personId).toBe('h1')
+    for (const tag of ['cats-biography-section', 'cats-media-section']) {
+      const section = element.shadowRoot!.querySelector(tag) as HTMLElement & { personId: string; isOwner: boolean } | null
+      expect([section?.personId, section?.isOwner]).toEqual(['h1', true])
+    }
   })
 
   it('does not treat a server error as a hidden person', async () => {

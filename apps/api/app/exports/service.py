@@ -1,8 +1,10 @@
-from datetime import date
+from collections.abc import Iterator
+from datetime import date, datetime
 
 from sqlalchemy import select
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, undefer
 
+from app.media.library import IMAGE_TYPES, MediaError, make_preview
 from app.models.genealogy import Event, ImportRun, Media, MediaLink, ParentChild, Person, Union
 
 
@@ -26,6 +28,23 @@ def _date_text(value: date | None) -> str | None:
     return value.isoformat() if value else None
 
 
+def _preview_or_none(content: bytes | None, media_type: str) -> bytes | None:
+    """A restore keeps the file even when its preview cannot be made."""
+    if content is None or media_type not in IMAGE_TYPES:
+        return None
+    try:
+        return make_preview(content)
+    except MediaError:
+        return None
+
+
+def media_contents(session: Session) -> Iterator[tuple[str, bytes]]:
+    """(archive id, file bytes) for every stored file; the backup script writes them next to the JSON."""
+    for media in session.scalars(select(Media).options(undefer(Media.content)).order_by(Media.id)):
+        if media.content is not None:
+            yield str(media.id), media.content
+
+
 def build_archive(session: Session) -> dict:
     people = session.scalars(select(Person)).all()
     unions = session.scalars(select(Union)).all()
@@ -37,7 +56,7 @@ def build_archive(session: Session) -> dict:
     return {
         "format": "cats-house-archive-v1",
         "people": [
-            {"archive_id": str(person.id), "display_name": person.display_name, "surname": person.surname, "given_name": person.given_name, "patronymic": person.patronymic, "birth_surname": person.birth_surname, "source_uid": person.source_uid, "sex": person.sex, "biography": person.biography, "is_archived": person.is_archived}
+            {"archive_id": str(person.id), "display_name": person.display_name, "surname": person.surname, "given_name": person.given_name, "patronymic": person.patronymic, "birth_surname": person.birth_surname, "source_uid": person.source_uid, "sex": person.sex, "biography": person.biography, "is_archived": person.is_archived, "portrait_archive_id": str(person.portrait_media_id) if person.portrait_media_id else None}
             for person in people
         ],
         "unions": [
@@ -70,7 +89,11 @@ def build_archive(session: Session) -> dict:
             for event in events
         ],
         "media_manifest": [
-            {"archive_id": str(item.id), "storage_key": item.storage_key, "media_type": item.media_type, "original_filename": item.original_filename, "is_published": item.is_published}
+            {
+                "archive_id": str(item.id), "storage_key": item.storage_key, "media_type": item.media_type, "original_filename": item.original_filename,
+                "is_published": item.is_published, "caption": item.caption, "date_label": item.date_label,
+                "created_at": item.created_at.isoformat() if item.created_at else None, "is_deleted": item.is_deleted,
+            }
             for item in media
         ],
         "media_links": [
@@ -81,7 +104,7 @@ def build_archive(session: Session) -> dict:
     }
 
 
-def restore_archive(session: Session, archive: dict) -> None:
+def restore_archive(session: Session, archive: dict, contents: dict[str, bytes] | None = None) -> None:
     if archive.get("format") != "cats-house-archive-v1":
         raise ValueError("Неподдерживаемый формат архива.")
     run = ImportRun(original_filename="cats-house-archive.json", sha256="archive", state="applied", normalized_payload={}, counts=archive["counts"])
@@ -145,7 +168,15 @@ def restore_archive(session: Session, archive: dict) -> None:
 
     restored_media: dict[str, Media] = {}
     for data in archive["media_manifest"]:
-        media = Media(storage_key=data["storage_key"], media_type=data["media_type"], original_filename=data.get("original_filename", ""), is_published=data.get("is_published", False))
+        content = (contents or {}).get(data.get("archive_id"))
+        media = Media(
+            storage_key=data.get("storage_key"), media_type=data["media_type"], original_filename=data.get("original_filename", ""),
+            is_published=data.get("is_published", False), caption=data.get("caption"), date_label=data.get("date_label"),
+            is_deleted=data.get("is_deleted", False), content=content,
+            preview=_preview_or_none(content, data["media_type"]),
+        )
+        if data.get("created_at"):
+            media.created_at = datetime.fromisoformat(data["created_at"])
         session.add(media)
         if data.get("archive_id"):
             restored_media[data["archive_id"]] = media
@@ -157,4 +188,9 @@ def restore_archive(session: Session, archive: dict) -> None:
         event = restored_events.get(data.get("event_archive_id"))
         if media and (person or event):
             session.add(MediaLink(media_id=media.id, person_id=person.id if person else None, event_id=event.id if event else None))
+
+    for data in archive["people"]:
+        portrait = restored_media.get(data.get("portrait_archive_id"))
+        if portrait is not None and data.get("archive_id") in restored_people:
+            restored_people[data["archive_id"]].portrait_media_id = portrait.id
     session.commit()

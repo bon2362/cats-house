@@ -14,8 +14,9 @@ class Settings(BaseSettings):
     )
 
     database_url: str
-    s3_endpoint: AnyHttpUrl
-    s3_bucket: str
+    # Files are stored in the database since stage 4; kept optional so old .env files still load.
+    s3_endpoint: AnyHttpUrl | None = None
+    s3_bucket: str | None = None
     owner_email: str
     owner_password_hash: SecretStr
     owner_totp_secret: SecretStr | None = None

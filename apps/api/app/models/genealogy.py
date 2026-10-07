@@ -1,9 +1,9 @@
 from datetime import datetime
 from uuid import UUID, uuid4
 
-from sqlalchemy import Date, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import Date, DateTime, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import JSONB, UUID as PostgreSQLUUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship
 
 from app.db.base import Base
 
@@ -40,6 +40,7 @@ class Person(Base):
     sex: Mapped[str | None] = mapped_column(String(32), nullable=True)
     biography: Mapped[str | None] = mapped_column(Text, nullable=True)
     is_archived: Mapped[bool] = mapped_column(default=False, server_default="false")
+    portrait_media_id: Mapped[UUID | None] = mapped_column(ForeignKey("media.id", name="fk_people_portrait_media"), nullable=True)
 
 
 class Union(Base):
@@ -93,10 +94,17 @@ class Source(Base):
 class Media(Base):
     __tablename__ = "media"
     id: Mapped[UUID] = mapped_column(PostgreSQLUUID(as_uuid=True), primary_key=True, default=uuid4)
-    storage_key: Mapped[str] = mapped_column(String(1024))
+    storage_key: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     media_type: Mapped[str] = mapped_column(String(32))
     original_filename: Mapped[str] = mapped_column(String(255), default="")
     is_published: Mapped[bool] = mapped_column(default=False, server_default="false")
+    # File bytes live in the database; lists never load them (deferred).
+    content: Mapped[bytes | None] = deferred(mapped_column(LargeBinary, nullable=True))
+    preview: Mapped[bytes | None] = deferred(mapped_column(LargeBinary, nullable=True))
+    caption: Mapped[str | None] = mapped_column(Text, nullable=True)
+    date_label: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
+    is_deleted: Mapped[bool] = mapped_column(default=False, server_default="false")
 
 
 class MediaLink(Base):

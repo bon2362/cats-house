@@ -144,24 +144,21 @@ def test_public_card_includes_active_family_relationships(client, database_sessi
 
 def test_public_card_includes_only_published_attached_media(client, database_session):
     person = add_person(database_session, "Анна")
-    published = Media(storage_key="media/published.jpg", media_type="image/jpeg", original_filename="published.jpg", is_published=True)
-    private = Media(storage_key="media/private.jpg", media_type="image/jpeg", original_filename="private.jpg", is_published=False)
-    database_session.add_all([published, private])
+    published = Media(media_type="application/pdf", original_filename="published.pdf", is_published=True, content=b"%PDF-1.4")
+    private = Media(media_type="application/pdf", original_filename="private.pdf", is_published=False, content=b"%PDF-1.4")
+    deleted = Media(media_type="application/pdf", original_filename="deleted.pdf", is_published=True, is_deleted=True, content=b"%PDF-1.4")
+    database_session.add_all([published, private, deleted])
     database_session.flush()
-    database_session.add_all([MediaLink(media_id=published.id, person_id=person.id), MediaLink(media_id=private.id, person_id=person.id)])
+    database_session.add_all([MediaLink(media_id=item.id, person_id=person.id) for item in (published, private, deleted)])
     database_session.commit()
 
-    class FakeStorage:
-        def public_url(self, key: str) -> str:
-            return f"https://media.example.test/{key}"
-
-    client.app.state.media_storage = FakeStorage()
     response = client.get(f"/api/v1/people/{person.id}")
 
     assert response.status_code == 200
     assert response.json()["media"] == [
-        {"id": str(published.id), "original_filename": "published.jpg", "url": "https://media.example.test/media/published.jpg"}
+        {"id": str(published.id), "original_filename": "published.pdf", "media_type": "application/pdf", "file_url": f"/api/v1/media/{published.id}/file"}
     ]
+    assert "portrait" not in response.json()
 
 
 def test_person_page_carries_birth_surname_sex_and_russian_event_labels(client, database_session):

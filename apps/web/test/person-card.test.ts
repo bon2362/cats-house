@@ -16,7 +16,7 @@ it('renders a profile, family, and a readable chronology', async () => {
     parents: [{ id: 'parent-id', display_name: 'Иван Иванов' }],
     children: [],
     partners: [{ id: 'partner-id', display_name: 'Пётр Петров' }],
-    media: [{ id: 'media-id', original_filename: 'family-photo.jpg', url: 'https://media.example.test/family-photo.jpg' }],
+    media: [{ id: 'media-id', original_filename: 'family-photo.jpg', media_type: 'image/jpeg', file_url: '/api/v1/media/media-id/file', preview_url: '/api/v1/media/media-id/preview' }],
   }
   document.body.append(element)
   await (element as unknown as { updateComplete: Promise<void> }).updateComplete
@@ -33,7 +33,11 @@ it('renders a profile, family, and a readable chronology', async () => {
   expect(element.shadowRoot?.textContent).toContain('Иван Иванов')
   expect(element.shadowRoot?.querySelector('a[href="/people/parent-id"]')).not.toBeNull()
   expect(element.shadowRoot?.querySelector('a[href="/tree?person=anna-id"]')).not.toBeNull()
-  expect(element.shadowRoot?.querySelector('a[href="https://media.example.test/family-photo.jpg"]')).not.toBeNull()
+  const gallery = element.shadowRoot?.querySelector('#media cats-media-section') as HTMLElement & { media: { id: string }[]; isOwner: boolean }
+  expect(gallery.media.map((item) => item.id)).toEqual(['media-id'])
+  expect(gallery.isOwner).toBe(false)
+  const biography = element.shadowRoot?.querySelector('#biography cats-biography-section') as HTMLElement & { biography: string | null; personId: string }
+  expect([biography.personId, biography.biography]).toEqual(['anna-id', 'Семейная заметка'])
 })
 
 const person = {
@@ -131,7 +135,7 @@ it('uses clear empty states instead of empty family and event lists', async () =
   expect(element.shadowRoot?.textContent).toContain('Родители в архиве не указаны')
   expect(element.shadowRoot?.textContent).toContain('Союзы и дети в архиве не указаны')
   expect(element.shadowRoot?.textContent).toContain('Хронология пока не заполнена')
-  expect(element.shadowRoot?.textContent).toContain('Биография пока не написана')
+  expect((element.shadowRoot?.querySelector('cats-biography-section') as HTMLElement).shadowRoot?.textContent).toContain('Биография пока не написана')
 })
 
 it('uses extended life details when the API provides them and omits empty events', async () => {
@@ -201,3 +205,29 @@ function ownerApi(body: string) {
   const family = JSON.stringify({ parents: [], unions: [], children_without_union: [], can_add_parent: true, can_add_sibling: false })
   return vi.fn((url: string) => Promise.resolve(new Response(String(url).endsWith('/family') ? family : body)))
 }
+
+it('shows the portrait instead of the monogram and keeps the biography out of the header', async () => {
+  const card = document.createElement('cats-person-card') as HTMLElement & { person: unknown; updateComplete: Promise<boolean> }
+  card.person = { ...person, biography: 'Длинная история', portrait: { id: 'm1', preview_url: '/api/v1/media/m1/preview', file_url: '/api/v1/media/m1/file' } }
+  document.body.append(card)
+  await card.updateComplete
+
+  const hero = card.shadowRoot!.querySelector('.hero')!
+  expect(hero.querySelector('img.portrait')?.getAttribute('src')).toBe('/api/v1/media/m1/preview')
+  expect(hero.querySelector('.monogram')).toBeNull()
+  expect(hero.textContent).not.toContain('Длинная история')
+})
+
+it('gives the owner editable biography and media sections', async () => {
+  vi.stubGlobal('fetch', ownerApi('[]'))
+  const card = document.createElement('cats-person-card') as HTMLElement & { person: unknown; isOwner: boolean; updateComplete: Promise<boolean> }
+  card.person = person
+  card.isOwner = true
+  document.body.append(card)
+  await card.updateComplete
+
+  for (const selector of ['#biography cats-biography-section', '#media cats-media-section']) {
+    const section = card.shadowRoot!.querySelector(selector) as HTMLElement & { personId: string; isOwner: boolean }
+    expect([section.personId, section.isOwner]).toEqual(['p1', true])
+  }
+})

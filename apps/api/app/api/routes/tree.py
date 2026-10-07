@@ -5,7 +5,8 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
-from app.genealogy.read_service import public_person_media
+from app.genealogy.read_service import public_portrait
+from app.models.genealogy import Person
 from app.genealogy.tree_service import TreeRelationPath, build_tree_graph
 
 router = APIRouter()
@@ -89,8 +90,8 @@ def get_tree(
                 **{key: value for key, value in person.__dict__.items() if key != "relationship"},
                 relationship=(TreeRelationshipResponse(**person.relationship.__dict__) if person.relationship else None),
                 photo_url=(
-                    request.app.state.media_storage.public_url(media[0].storage_key)
-                    if not person.is_hidden and (media := public_person_media(session, person.id))
+                    f"/api/v1/media/{portrait.id}/preview"
+                    if not person.is_hidden and (portrait := public_portrait(session, session.get(Person, person.id)))
                     else None
                 ),
             )

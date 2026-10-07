@@ -71,3 +71,11 @@ def test_development_environment_disables_secure_cookie_only_for_local_use(monke
     monkeypatch.setenv("CATS_HOUSE_ENVIRONMENT", "development")
 
     assert Settings().session_cookie_secure is False
+
+
+def test_settings_no_longer_need_s3(monkeypatch):
+    set_required_settings(monkeypatch)
+    monkeypatch.delenv("CATS_HOUSE_S3_ENDPOINT")
+    monkeypatch.delenv("CATS_HOUSE_S3_BUCKET")
+
+    assert Settings().owner_email == "owner@example.test"
