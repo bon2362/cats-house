@@ -1,7 +1,7 @@
 """In-memory limit on failed owner sign-ins, per client address.
 
-One owner and one API process: memory is enough. Behind a reverse proxy the
-client address must come from a trusted header; that is outside this stage.
+One owner and one API process: memory is enough. Behind the public tunnel the
+address comes from app.web.limits.client_address (the tunnel's trusted header).
 """
 
 import math

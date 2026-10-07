@@ -1,3 +1,4 @@
+from pathlib import Path
 from typing import Literal
 
 from pydantic import AnyHttpUrl, SecretStr, field_validator
@@ -22,6 +23,10 @@ class Settings(BaseSettings):
     owner_totp_secret: SecretStr | None = None
     session_secret: SecretStr
     environment: Literal["development", "production"]
+    # Folder of the built web app; when set the API also serves the pages (public launch).
+    web_dist: Path | None = None
+    # Public launch behind the tunnel: trust its visitor-address header and limit request rates.
+    public_mode: bool = False
 
     @field_validator("owner_password_hash")
     @classmethod

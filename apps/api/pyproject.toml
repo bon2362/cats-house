@@ -24,6 +24,7 @@ dependencies = [
 dev = [
   "httpx>=0.28,<1",
   "pytest>=8.3,<9",
+  "qrcode>=8,<9",
   "testcontainers[community]>=4.15,<5",
 ]
 

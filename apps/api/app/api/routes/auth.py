@@ -3,6 +3,7 @@ from pydantic import BaseModel
 
 from app.api.dependencies import OwnerSession, is_owner, require_owner
 from app.auth.service import verify_owner_password, verify_totp
+from app.web.limits import client_address
 
 router = APIRouter()
 
@@ -24,7 +25,7 @@ def owner_status(request: Request) -> dict[str, bool]:
 def login_owner(payload: LoginRequest, request: Request) -> Response:
     settings = request.app.state.settings
     throttle = request.app.state.login_throttle
-    address = request.client.host if request.client else "unknown"
+    address = client_address(request)
 
     # The attempt is counted before the password check; success removes it.
     wait = throttle.reserve(address)
