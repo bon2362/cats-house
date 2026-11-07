@@ -30,7 +30,7 @@
    отказ; обойти можно только явным флагом `--without-2fa`).
 2. Собирает окончательную версию сайта (`npm run build` → `apps/web/dist`).
 3. Если в базе есть непримененные миграции — снимает полную копию базы
-   (`pg_dump` в `~/cats-house-backups/before-migrate-<время>.sql`) и
+   (`pg_dump` в `~/Cat's House backups/перед обновлением/before-migrate-<время>.sql`) и
    применяет их.
 4. Запускает API на `127.0.0.1:8100` в «публичном режиме» с
    `CATS_HOUSE_ENVIRONMENT=production`; API же отдаёт собранные страницы.

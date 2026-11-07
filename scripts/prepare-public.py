@@ -9,7 +9,8 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 API = ROOT / "apps" / "api"
-BACKUPS = Path.home() / "cats-house-backups"
+# Все копии сайта — в одной папке рядом с проектом (не внутри: git clean её бы стёр).
+BACKUPS = Path.home() / "Cat's House backups" / "перед обновлением"
 
 
 def load_env(env_file: Path) -> None:
@@ -42,7 +43,7 @@ def main() -> int:
         print(f"База в актуальном состоянии ({current}).")
         return 0
 
-    BACKUPS.mkdir(exist_ok=True)
+    BACKUPS.mkdir(parents=True, exist_ok=True)
     backup = BACKUPS / f"before-migrate-{datetime.now(UTC).strftime('%Y%m%dT%H%M%SZ')}.sql"
     dump = subprocess.run(
         ["docker", "exec", "catshouse-postgres-1", "sh", "-c", 'pg_dump -U "$POSTGRES_USER" -d "$POSTGRES_DB"'],
