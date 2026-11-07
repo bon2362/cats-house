@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import importlib.util
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -67,3 +68,27 @@ def test_verification_rejects_different_table_counts(monkeypatch):
 
     with pytest.raises(RuntimeError, match="Количество строк не совпадает"):
         module.verify_migration("source", "target")
+
+
+def test_migrate_passes_target_database_name_to_pg_restore(monkeypatch, tmp_path):
+    module = load_script()
+    commands: list[list[str]] = []
+
+    def fake_run(command, environment):
+        commands.append(command)
+        if command[0] == "psql":
+            return subprocess.CompletedProcess(command, 0, stdout="0\n", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(module, "run", fake_run)
+    monkeypatch.setattr(module, "verify_migration", lambda *_args: None)
+
+    module.migrate(
+        "postgresql://source/source_db",
+        "postgresql://target/target_db?sslmode=require",
+        tmp_path,
+    )
+
+    restore = next(command for command in commands if command[0] == "pg_restore")
+    assert restore[restore.index("--dbname") + 1] == "target_db"
+    assert all(command[1:3] != ["-m", "alembic"] for command in commands)

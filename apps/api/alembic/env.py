@@ -1,7 +1,7 @@
 import os
 
 from alembic import context
-from sqlalchemy import engine_from_config, pool
+from sqlalchemy import engine_from_config, pool, text
 
 from app.models import Base
 import app.models.genealogy  # noqa: F401
@@ -15,7 +15,12 @@ target_metadata = Base.metadata
 def run_migrations_online() -> None:
     connectable = engine_from_config(config.get_section(config.config_ini_section), prefix="sqlalchemy.", poolclass=pool.NullPool)
     with connectable.connect() as connection:
-        context.configure(connection=connection, target_metadata=target_metadata)
+        connection.execute(text("SET search_path TO public"))
+        context.configure(
+            connection=connection,
+            target_metadata=target_metadata,
+            version_table_schema="public",
+        )
         with context.begin_transaction():
             context.run_migrations()
 

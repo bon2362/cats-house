@@ -119,10 +119,18 @@ def migrate(source_url: str, target_url: str, output: Path) -> None:
     if not target_is_empty(target_url):
         parser_error("Целевая база Neon не пуста; перенос отменён.")
     run(["pg_dump", "--format=custom", "--file", str(dump)], pg_environment(source_url))
-    run(["pg_restore", "--no-owner", "--no-privileges", "--exit-on-error", str(dump)], pg_environment(target_url))
+    target_environment = pg_environment(target_url)
     run(
-        [sys.executable, "-m", "alembic", "upgrade", "head"],
-        {**os.environ, "CATS_HOUSE_DATABASE_URL": target_url},
+        [
+            "pg_restore",
+            "--dbname",
+            target_environment["PGDATABASE"],
+            "--no-owner",
+            "--no-privileges",
+            "--exit-on-error",
+            str(dump),
+        ],
+        target_environment,
     )
     verify_migration(source_url, target_url)
     print(f"Перенос завершён. Файл выгрузки сохранён: {dump}")
