@@ -4,6 +4,9 @@
 # Isolated local Git worktrees
 .worktrees/
 
+# Local agent workspaces and historical run reports
+.superpowers/
+
 # Local configuration and generated dependencies
 .env
 .venv/
