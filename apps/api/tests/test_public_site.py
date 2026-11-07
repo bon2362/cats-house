@@ -62,6 +62,16 @@ def test_forged_tunnel_header_is_ignored_from_a_remote_connection(settings):
     assert call(app, "GET", "/api/v1/health", {"CF-Connecting-IP": "198.51.100.200"}, client=("192.0.2.9", 5000)).status_code == 429
 
 
+def test_vercel_mode_uses_only_the_platform_client_address_header(settings):
+    app = public(settings, deployment="vercel")
+    first = {"x-vercel-forwarded-for": "203.0.113.31", "CF-Connecting-IP": "203.0.113.99"}
+    for _ in range(120):
+        assert call(app, "GET", "/api/v1/health", first, client=("192.0.2.9", 5000)).status_code == 200
+
+    other = {"x-vercel-forwarded-for": "203.0.113.32", "CF-Connecting-IP": "203.0.113.99"}
+    assert call(app, "GET", "/api/v1/health", other, client=("192.0.2.9", 5000)).status_code == 200
+
+
 def test_the_signed_in_owner_is_not_limited(settings):
     app = public(settings)
 

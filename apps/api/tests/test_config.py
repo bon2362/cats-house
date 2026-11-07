@@ -1,8 +1,10 @@
 import pytest
 from argon2 import PasswordHasher
 from pydantic import ValidationError
+from sqlalchemy.pool import NullPool
 
 from app.core.config import Settings
+from app.db.session import create_session_factory
 
 
 def set_required_settings(monkeypatch):
@@ -79,3 +81,34 @@ def test_settings_no_longer_need_s3(monkeypatch):
     monkeypatch.delenv("CATS_HOUSE_S3_BUCKET")
 
     assert Settings().owner_email == "owner@example.test"
+
+
+def test_vercel_production_requires_tls_database_url(monkeypatch):
+    set_required_settings(monkeypatch)
+    monkeypatch.setenv("CATS_HOUSE_DEPLOYMENT", "vercel")
+
+    with pytest.raises(ValidationError):
+        Settings()
+
+
+def test_vercel_production_accepts_tls_database_url(monkeypatch):
+    set_required_settings(monkeypatch)
+    monkeypatch.setenv("CATS_HOUSE_DEPLOYMENT", "vercel")
+    monkeypatch.setenv(
+        "CATS_HOUSE_DATABASE_URL",
+        "postgresql+psycopg://cats_house:password@ep-cats-house-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require",
+    )
+
+    assert Settings().deployment == "vercel"
+
+
+def test_vercel_session_factory_does_not_keep_database_connections():
+    factory = create_session_factory(
+        "postgresql+psycopg://cats_house:password@ep-cats-house-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require",
+        "vercel",
+    )
+
+    try:
+        assert isinstance(factory.kw["bind"].pool, NullPool)
+    finally:
+        factory.kw["bind"].dispose()

@@ -17,6 +17,8 @@ LOCAL = {"127.0.0.1", "::1"}
 def client_address(request: Request) -> str:
     """The tunnel's CF-Connecting-IP is trusted only in public mode and only from a local connection."""
     host = request.client.host if request.client else "unknown"
+    if request.app.state.settings.deployment == "vercel":
+        return request.headers.get("x-vercel-forwarded-for", "").strip() or host
     forwarded = request.headers.get("cf-connecting-ip", "").strip()
     if request.app.state.settings.public_mode and host in LOCAL and forwarded:
         return forwarded

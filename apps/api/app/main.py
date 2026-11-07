@@ -15,7 +15,7 @@ def create_app(settings: Settings) -> FastAPI:
     hidden = {"docs_url": None, "redoc_url": None, "openapi_url": None} if settings.public_mode else {}
     app = FastAPI(title="Cat's House API", **hidden)
     app.state.settings = settings
-    app.state.session_factory = create_session_factory(settings.database_url)
+    app.state.session_factory = create_session_factory(settings.database_url, settings.deployment)
     app.state.login_throttle = LoginThrottle()
     add_rate_limit(app)  # inside the session middleware: it needs to see the owner's session
     app.add_middleware(

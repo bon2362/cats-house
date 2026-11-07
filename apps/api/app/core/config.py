@@ -1,7 +1,8 @@
 from pathlib import Path
 from typing import Literal
+from urllib.parse import parse_qs, urlparse
 
-from pydantic import AnyHttpUrl, SecretStr, field_validator
+from pydantic import AnyHttpUrl, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -27,6 +28,8 @@ class Settings(BaseSettings):
     web_dist: Path | None = None
     # Public launch behind the tunnel: trust its visitor-address header and limit request rates.
     public_mode: bool = False
+    # The trusted reverse-proxy environment, if any.
+    deployment: Literal["local", "tunnel", "vercel"] = "local"
 
     @field_validator("owner_password_hash")
     @classmethod
@@ -44,6 +47,14 @@ class Settings(BaseSettings):
         if secret.startswith("replace-this-"):
             raise ValueError("Замените пример секрета сессии уникальным значением.")
         return value
+
+    @model_validator(mode="after")
+    def vercel_database_must_use_tls(self) -> "Settings":
+        if self.deployment == "vercel":
+            sslmode = parse_qs(urlparse(self.database_url).query).get("sslmode", [])
+            if "require" not in sslmode:
+                raise ValueError("Для Vercel укажите PostgreSQL URL Neon с sslmode=require.")
+        return self
 
     @property
     def session_cookie_secure(self) -> bool:
