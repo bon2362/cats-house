@@ -57,6 +57,14 @@ def test_settings_rejects_non_argon2_password_hash(monkeypatch):
         Settings()
 
 
+def test_settings_normalizes_docker_compose_escaped_argon2_hash(monkeypatch):
+    set_required_settings(monkeypatch)
+    escaped_hash = PasswordHasher().hash("test-owner-password").replace("$argon2", "$$argon2", 1)
+    monkeypatch.setenv("CATS_HOUSE_OWNER_PASSWORD_HASH", escaped_hash)
+
+    assert Settings().owner_password_hash.get_secret_value().startswith("$argon2")
+
+
 def test_settings_rejects_example_session_secret(monkeypatch):
     set_required_settings(monkeypatch)
     monkeypatch.setenv(

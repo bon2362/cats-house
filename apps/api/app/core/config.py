@@ -34,9 +34,13 @@ class Settings(BaseSettings):
     @field_validator("owner_password_hash")
     @classmethod
     def password_hash_must_use_argon2(cls, value: SecretStr) -> SecretStr:
-        if not value.get_secret_value().startswith("$argon2"):
+        password_hash = value.get_secret_value()
+        # Docker Compose escapes a literal dollar as `$$`; accept a hash copied from .env directly to hosting.
+        if password_hash.startswith("$$argon2"):
+            password_hash = password_hash[1:]
+        if not password_hash.startswith("$argon2"):
             raise ValueError("Хеш пароля владельца должен быть в формате Argon2.")
-        return value
+        return SecretStr(password_hash)
 
     @field_validator("session_secret")
     @classmethod
