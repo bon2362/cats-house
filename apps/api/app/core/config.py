@@ -31,6 +31,14 @@ class Settings(BaseSettings):
     # The trusted reverse-proxy environment, if any.
     deployment: Literal["local", "tunnel", "vercel"] = "local"
 
+    @field_validator("database_url", mode="before")
+    @classmethod
+    def standard_postgres_url_uses_psycopg(cls, value: str) -> str:
+        """Accept Neon URLs while using the project's installed PostgreSQL driver."""
+        if value.startswith("postgresql://"):
+            return "postgresql+psycopg://" + value.removeprefix("postgresql://")
+        return value
+
     @field_validator("owner_password_hash")
     @classmethod
     def password_hash_must_use_argon2(cls, value: SecretStr) -> SecretStr:

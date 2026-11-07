@@ -110,6 +110,16 @@ def test_vercel_production_accepts_tls_database_url(monkeypatch):
     assert Settings().deployment == "vercel"
 
 
+def test_settings_normalizes_standard_neon_url_to_psycopg(monkeypatch):
+    set_required_settings(monkeypatch)
+    monkeypatch.setenv(
+        "CATS_HOUSE_DATABASE_URL",
+        "postgresql://cats_house:password@ep-cats-house-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require",
+    )
+
+    assert Settings().database_url.startswith("postgresql+psycopg://")
+
+
 def test_vercel_session_factory_does_not_keep_database_connections():
     factory = create_session_factory(
         "postgresql+psycopg://cats_house:password@ep-cats-house-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require",
