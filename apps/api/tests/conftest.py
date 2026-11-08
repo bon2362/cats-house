@@ -10,7 +10,7 @@ from app.core.config import Settings
 
 @pytest.fixture(scope="session")
 def postgres_url():
-    with PostgresContainer("postgres:16-alpine", driver="psycopg") as postgres:
+    with PostgresContainer("postgres:18-alpine", driver="psycopg") as postgres:
         yield postgres.get_connection_url()
 
 
@@ -20,8 +20,6 @@ def settings(monkeypatch, postgres_url):
         "CATS_HOUSE_DATABASE_URL",
         postgres_url,
     )
-    monkeypatch.setenv("CATS_HOUSE_S3_ENDPOINT", "http://localhost:9000")
-    monkeypatch.setenv("CATS_HOUSE_S3_BUCKET", "cats-house-media")
     monkeypatch.setenv("CATS_HOUSE_OWNER_EMAIL", "owner@example.test")
     monkeypatch.setenv(
         "CATS_HOUSE_OWNER_PASSWORD_HASH",

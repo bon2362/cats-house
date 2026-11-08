@@ -15,8 +15,7 @@ if [[ ! -f "$env_file" ]]; then
   exit 1
 fi
 
-# PostgreSQL is required. The S3 emulator is optional: the public tree can run
-# without it, which keeps local development usable when Docker networking is down.
+# Only PostgreSQL runs in Docker; the API and web run from the local environments.
 docker compose --env-file "$env_file" up -d postgres
 
 cleanup() { kill "${api_pid:-}" "${web_pid:-}" 2>/dev/null || true; }
