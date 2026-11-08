@@ -125,7 +125,7 @@ healthchecks.io, одна проверка: период 1 день, допус�
   `CATS_HOUSE_DATABASE_URL` API-проекта на Vercel и повторное развёртывание);
 - ежеквартальную проверку.
 
-Скрипт `scripts/verify-backup-file.py <файл.dump>` на Mac (нужен Docker):
+Скрипт `apps/backup/scripts/verify-backup-file.py <файл.dump>` на Mac (нужен Docker):
 восстанавливает файл во временный контейнер `postgres:17-alpine` тем же
 `pg_restore`, считает строки во всех таблицах и SHA-256 содержимого файлов
 (`media.content`, `media.preview`), удаляет контейнер. Если задана
@@ -160,7 +160,7 @@ healthchecks.io, одна проверка: период 1 день, допус�
   тестовой базы PostgreSQL 17 (testcontainers) с выдуманными людьми и
   файлами: копия проходит проверку, после восстановления файлы совпадают
   побайтно; копия без таблицы `media` отвергается;
-- `scripts/verify-backup-file.py` на тестовой копии.
+- `apps/backup/scripts/verify-backup-file.py` на тестовой копии.
 
 Ручные (после настройки секретов): запуск адреса вручную с секретом; файл в
 Drive; сигнал на healthchecks.io; скачанная копия проходит
