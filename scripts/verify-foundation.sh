@@ -54,7 +54,7 @@ node --test scripts/check-notices.test.mjs
 
 "${compose[@]}" config >/dev/null
 
-for service in postgres minio api web; do
+for service in postgres api web; do
   if ! service_is_running "$service"; then
     started_services+=("$service")
   fi

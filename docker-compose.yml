@@ -21,8 +21,6 @@ services:
       - ./apps/api:/workspace
     environment:
       CATS_HOUSE_DATABASE_URL: ${CATS_HOUSE_DATABASE_URL:-postgresql+psycopg://cats_house:local-development-password@postgres:5432/cats_house}
-      CATS_HOUSE_S3_ENDPOINT: ${CATS_HOUSE_S3_ENDPOINT:-http://minio:4566}
-      CATS_HOUSE_S3_BUCKET: ${CATS_HOUSE_S3_BUCKET:-cats-house-media}
       CATS_HOUSE_OWNER_EMAIL: ${CATS_HOUSE_OWNER_EMAIL:-owner@example.test}
       CATS_HOUSE_OWNER_PASSWORD_HASH: ${CATS_HOUSE_OWNER_PASSWORD_HASH:?Set CATS_HOUSE_OWNER_PASSWORD_HASH in .env}
       CATS_HOUSE_SESSION_SECRET: ${CATS_HOUSE_SESSION_SECRET:?Set CATS_HOUSE_SESSION_SECRET in .env}
@@ -32,11 +30,9 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      minio:
-        condition: service_started
 
   postgres:
-    image: postgres:16-alpine
+    image: postgres:18-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-cats_house}
       POSTGRES_USER: ${POSTGRES_USER:-cats_house}
@@ -47,19 +43,11 @@ services:
       timeout: 3s
       retries: 20
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres18_data:/var/lib/postgresql
     ports:
       - "127.0.0.1:5432:5432"
 
-  minio:
-    image: localstack/localstack:2026.08.2
-    environment:
-      SERVICES: s3
-    ports:
-      - "127.0.0.1:4566:4566"
-    volumes:
-      - minio_data:/var/lib/localstack
-
 volumes:
-  postgres_data:
-  minio_data:
+  # PostgreSQL 18, как в Neon. Старый том postgres_data (PostgreSQL 16) не
+  # используется и не удаляется автоматически.
+  postgres18_data:
