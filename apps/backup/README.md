@@ -4,7 +4,7 @@
 (расписание `0 2 * * *` по UTC: зимой 03:00–03:59, летом 04:00–04:59 по
 времени Белграда) он:
 
-1. снимает стандартную копию базы Neon (`pg_dump` 17.11, формат `custom`);
+1. снимает стандартную копию базы Neon (`pg_dump` 18.6, формат `custom`);
 2. проверяет, что копия читается и в ней есть данные таблиц `people`, `unions`,
    `parent_children`, `events`, `media`;
 3. загружает файл `cats-house-ГГГГ-ММ-ДДTЧЧММZ.dump` в Google Drive, в папку
@@ -163,7 +163,7 @@ cd apps/backup && vercel curl /api/backup -- --header @"$HOME/.config/cats-house
 1. Drive → «Cat's House — копии базы» → скачать нужный файл `.dump`.
 2. Создать пустую базу для восстановления: Neon → проект `cats-house` →
    **Databases → New database** (например `restore_ГГГГММДД`), или пустую
-   локальную базу PostgreSQL 17. Строку подключения сохранить в файл, как в
+   локальную базу PostgreSQL 18. Строку подключения сохранить в файл, как в
    шаге 1 настройки (например `~/.config/cats-house/restore-db.url`).
 3. Восстановить скриптом (нужен `apps/backup/.venv`, см. «Разработка»). Адрес
    базы передаётся переменной окружения, а не в аргументах команды; в базу, где
@@ -174,8 +174,8 @@ CATS_HOUSE_RESTORE_DATABASE_URL="$(cat ~/.config/cats-house/restore-db.url)" app
 ```
 
    Скрипт выполняет обычный `pg_restore --no-owner --no-privileges --exit-on-error`
-   версии 17.11: файл копии можно восстановить и без кода проекта любым
-   `pg_restore` версии 17 и новее.
+   версии 18.6: файл копии можно восстановить и без кода проекта любым
+   `pg_restore` версии 18 и новее.
 
 4. Проверить сайт на восстановленной базе: в Vercel → `cats-house-api` →
    **Settings → Environment Variables** заменить `CATS_HOUSE_DATABASE_URL`
@@ -226,4 +226,4 @@ cd apps/backup && /opt/homebrew/bin/python3.12 -m venv .venv && .venv/bin/pip in
 cd apps/backup && .venv/bin/pytest -q
 ```
 
-Тесты используют выдуманные данные и временную базу PostgreSQL 17 в Docker.
+Тесты используют выдуманные данные и временную базу PostgreSQL 18 в Docker.

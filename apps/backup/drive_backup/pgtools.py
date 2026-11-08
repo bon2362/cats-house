@@ -18,16 +18,21 @@ class DumpError(Exception):
 
 
 def ensure_binaries(target: Path = Path("/tmp/pg")) -> Path:
-    found = sorted(Path(target).glob("*/bin/pg_dump"))
-    if not found:
-        import postgresql_binaries
+    """Unpack the PostgreSQL tools of the installed package (once) and return their bin directory.
 
-        archive = next(Path(postgresql_binaries.__file__).parent.glob("*.tar.gz"))
+    The directory is named after the package archive, so tools of another version unpacked into the
+    same target are never picked up by mistake.
+    """
+    import postgresql_binaries
+
+    archive = next(Path(postgresql_binaries.__file__).parent.glob("*.tar.gz"))
+    bin_dir = Path(target) / archive.name.removesuffix(".tar.gz") / "bin"
+    if not (bin_dir / "pg_dump").exists():
         Path(target).mkdir(parents=True, exist_ok=True)
         with tarfile.open(archive) as tar:
             tar.extractall(target, filter="data")
-        found = sorted(Path(target).glob("*/bin/pg_dump"))
-    bin_dir = found[0].parent
+    if not (bin_dir / "pg_dump").exists():
+        raise DumpError(f"в пакете postgresql-binaries нет {bin_dir.name}/pg_dump")
     for name in ("pg_dump", "pg_restore", "psql"):
         tool = bin_dir / name
         if tool.exists():

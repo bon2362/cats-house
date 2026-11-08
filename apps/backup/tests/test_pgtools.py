@@ -11,7 +11,7 @@ from .conftest import create_schema, media_digests
 def test_unpacked_tools_are_postgres_17(bin_dir):
     for name in ("pg_dump", "pg_restore"):
         out = subprocess.run([str(bin_dir / name), "--version"], capture_output=True, text=True, check=True).stdout
-        assert "17.11" in out
+        assert "18.6" in out
 
 
 def test_environment_carries_connection_without_url():
@@ -80,3 +80,14 @@ def test_dump_retries_once_and_keeps_url_out_of_arguments(tmp_path):
 def test_dump_fails_after_second_attempt_with_last_error_line(tmp_path):
     with pytest.raises(DumpError, match="connection to server failed"):
         dump(URL, tmp_path / "x.dump", tmp_path, run=FakeRun([1, 1]), sleep=lambda _: None)
+
+
+def test_uses_the_installed_version_even_if_another_is_unpacked(tmp_path):
+    from drive_backup.pgtools import ensure_binaries
+    stale = tmp_path / "postgresql-17.11.0-x86_64-unknown-linux-gnu" / "bin"
+    stale.mkdir(parents=True)
+    (stale / "pg_dump").write_text("#!/bin/sh\necho stale\n")
+    bin_dir = ensure_binaries(tmp_path)
+    assert bin_dir != stale
+    out = subprocess.run([str(bin_dir / "pg_dump"), "--version"], capture_output=True, text=True, check=True).stdout
+    assert "18.6" in out

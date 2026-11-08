@@ -26,7 +26,7 @@ def create_schema(conn, with_media=True):
 
 @pytest.fixture(scope="session")
 def source_db():
-    with PostgresContainer("postgres:17-alpine", driver=None) as container:
+    with PostgresContainer("postgres:18-alpine", driver=None) as container:
         url = container.get_connection_url()
         with psycopg.connect(url, autocommit=True) as conn:
             create_schema(conn)

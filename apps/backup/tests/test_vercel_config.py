@@ -14,7 +14,7 @@ def test_vercel_config_runs_one_function_nightly_without_secrets():
 
 def test_runtime_dependencies_are_only_pinned_postgres_binaries():
     lines = [l.strip() for l in (ROOT / "requirements.txt").read_text().splitlines() if l.strip()]
-    assert lines == ["postgresql-binaries==17.11.0"]
+    assert lines == ["postgresql-binaries==18.6.0"]
 
 
 def test_tests_and_scripts_are_not_deployed():

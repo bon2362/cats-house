@@ -3,7 +3,7 @@
 
 apps/backup/.venv/bin/python apps/backup/scripts/verify-backup-file.py <файл.dump>
 
-Восстанавливает копию во временный контейнер postgres:17-alpine (нужен Docker),
+Восстанавливает копию во временный контейнер postgres:18-alpine (нужен Docker),
 считает строки во всех таблицах и SHA-256 содержимого всех файлов. Если задана
 переменная CATS_HOUSE_SOURCE_DATABASE_URL — сравнивает с этой базой.
 Контейнер удаляется. Ни Neon, ни Drive не изменяются.
@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from drive_backup.pgtools import ensure_binaries, pg_environment  # noqa: E402
 
-IMAGE = "postgres:17-alpine"
+IMAGE = "postgres:18-alpine"
 STATS_SQL = (
     "select table_schema || '.' || table_name, "
     "(xpath('/row/c/text()', query_to_xml(format('select count(*) as c from %I.%I', "
