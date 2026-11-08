@@ -1,0 +1,5 @@
+.venv
+tests
+scripts
+requirements-dev.txt
+pytest.ini
