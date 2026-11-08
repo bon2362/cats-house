@@ -7,7 +7,7 @@ ROOT = Path(__file__).parents[1]
 def test_vercel_config_runs_one_function_nightly_without_secrets():
     config = json.loads((ROOT / "vercel.json").read_text(encoding="utf-8"))
     assert config["regions"] == ["fra1"]
-    assert config["functions"] == {"api/backup.py": {"maxDuration": 300}}
+    assert config["functions"] == {"api/index.py": {"maxDuration": 300}}
     assert config["crons"] == [{"path": "/api/backup", "schedule": "0 2 * * *"}]
     assert "env" not in config
 

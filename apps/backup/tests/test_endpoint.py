@@ -72,7 +72,7 @@ def test_missing_cron_secret_fails_closed():
 
 
 def test_vercel_entry_answers_401_without_secret(monkeypatch):
-    path = Path(__file__).parents[1] / "api" / "backup.py"
+    path = Path(__file__).parents[1] / "api" / "index.py"
     spec = importlib.util.spec_from_file_location("vercel_entry", path)
     module = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(module)

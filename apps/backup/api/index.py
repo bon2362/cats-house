@@ -1,4 +1,4 @@
-"""Вход функции Vercel: GET /api/backup, вызывается расписанием Vercel Cron."""
+"""Вход функции Vercel (api/index.py — стандартное место входа Python на Vercel): GET /api/backup, вызывается расписанием Vercel Cron."""
 
 import json
 import os

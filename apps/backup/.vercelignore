@@ -3,3 +3,5 @@ tests
 scripts
 requirements-dev.txt
 pytest.ini
+.env*
+.vercel
