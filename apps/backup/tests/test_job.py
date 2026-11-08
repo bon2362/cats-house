@@ -81,3 +81,14 @@ def test_failed_verification_uploads_nothing(drive, tmp_path):
                    dumper=fake_dumper, verifier=bad_verifier)
     assert drive.live_names(folder) == []
     assert list(tmp_path.iterdir()) == []
+
+
+def test_unverifiable_upload_is_trashed(drive, tmp_path):
+    client = drive.client()
+    old = ["cats-house-2026-01-01T0200Z.dump"]
+    folder = seed(drive, client, old)
+    drive.fail_info = True
+    with pytest.raises(DriveError):
+        run_backup(settings_for("postgresql://x"), drive=client, now=NOW, bin_dir=tmp_path, workdir=tmp_path,
+                   dumper=fake_dumper, verifier=lambda path, bin_dir: None)
+    assert drive.live_names(folder) == old

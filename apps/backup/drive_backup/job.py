@@ -34,9 +34,17 @@ def run_backup(settings: Settings, *, drive, now: dt.datetime, bin_dir: Path, wo
         local_md5 = _md5(target)
         folder = drive.find_or_create_folder()
         file_id = drive.upload(folder, target, name)
-        if drive.file_info(file_id).get("md5Checksum") != local_md5:
-            drive.trash(file_id)
-            raise BackupError("файл в Google Drive не совпал с копией — загрузка отменена")
+        try:
+            matches = drive.file_info(file_id).get("md5Checksum") == local_md5
+            if not matches:
+                raise BackupError("файл в Google Drive не совпал с копией — загрузка отменена")
+        except Exception:
+            # An upload that was not verified must not stay in the folder looking like the newest copy.
+            try:
+                drive.trash(file_id)
+            except Exception:  # noqa: BLE001 — report the original problem, not the clean-up failure
+                pass
+            raise
         files = drive.list_files(folder)
         to_trash = set(names_to_trash([f["name"] for f in files], now.astimezone(dt.timezone.utc).date()))
         trashed = []

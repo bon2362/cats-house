@@ -19,6 +19,9 @@ class FakeDrive:
         self.sessions = {}
         self.corrupt_md5 = False
         self.fail_upload = False
+        self.fail_info = False
+        self.puts = []
+        self.partial = {}
         drive = self
 
         class Handler(BaseHTTPRequestHandler):
@@ -73,9 +76,26 @@ class FakeDrive:
                     return self.reply(404)
                 if drive.fail_upload:
                     return self.reply(503, {"error": {"message": "Backend Error"}})
+                drive.puts.append(len(content))
+                total = None
+                data = drive.partial.get(session, b"") + content
+                rng = self.headers.get("Content-Range")
+                if rng:
+                    match = re.fullmatch(r"bytes (\d+)-(\d+)/(\d+)", rng)
+                    if not match or int(match.group(1)) != len(drive.partial.get(session, b"")):
+                        return self.reply(400, {"error": {"message": "bad range"}})
+                    total = int(match.group(3))
+                if total is not None and len(data) < total:
+                    drive.partial[session] = data
+                    self.send_response(308)
+                    self.send_header("Range", f"bytes=0-{len(data) - 1}")
+                    self.send_header("Content-Length", "0")
+                    self.end_headers()
+                    return
+                drive.partial.pop(session, None)
                 meta = drive.sessions.pop(session)
                 file_id = uuid.uuid4().hex
-                drive.files[file_id] = {**meta, "id": file_id, "trashed": False, "content": content}
+                drive.files[file_id] = {**meta, "id": file_id, "trashed": False, "content": data}
                 self.reply(200, {"id": file_id, "name": meta["name"]})
 
             def do_GET(self):
@@ -87,6 +107,8 @@ class FakeDrive:
                     item = drive.files.get(match.group(1))
                     if not item:
                         return self.reply(404)
+                    if drive.fail_info:
+                        return self.reply(500, {"error": {"message": "Internal Error"}})
                     md5 = hashlib.md5(item.get("content", b"")).hexdigest()
                     if drive.corrupt_md5:
                         md5 = "0" * 32

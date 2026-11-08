@@ -12,6 +12,8 @@ FOLDER_MIME = "application/vnd.google-apps.folder"
 FOLDER_NAME = "Cat's House — копии базы"
 MARK_KEY = "cats_house_backups"
 JSON_TYPE = "application/json; charset=UTF-8"
+# Google requires chunks to be multiples of 256 KiB (except the last one).
+CHUNK_SIZE = 16 * 1024 * 1024
 
 
 class DriveError(Exception):
@@ -32,6 +34,7 @@ class DriveClient:
         self.upload_url = upload_url
         self.timeout = timeout
         self._access_token: str | None = None
+        self.chunk_size = CHUNK_SIZE
 
     def _send(self, method: str, url: str, *, data: bytes | None = None,
               headers: dict[str, str] | None = None, auth: bool = True):
@@ -88,19 +91,48 @@ class DriveClient:
                                 headers={"Content-Type": JSON_TYPE})
         return created["id"]
 
+    def _put_chunk(self, session: str, chunk: bytes, content_range: str) -> tuple[bool, dict]:
+        """Send one chunk; returns (finished, body). Google answers 308 while more bytes are expected."""
+        request = urllib.request.Request(session, data=chunk, method="PUT", headers={
+            "Authorization": f"Bearer {self._token()}",
+            "Content-Type": "application/octet-stream",
+            "Content-Range": content_range,
+        })
+        try:
+            with urllib.request.urlopen(request, timeout=self.timeout) as response:
+                body = response.read()
+                return True, (json.loads(body) if body else {})
+        except urllib.error.HTTPError as error:
+            if error.code == 308:
+                return False, {}
+            detail = error.read().decode("utf-8", "replace")[:300]
+            raise DriveError(f"Google Drive ответил {error.code}: {detail}") from None
+        except (urllib.error.URLError, TimeoutError, OSError) as error:
+            reason = getattr(error, "reason", error)
+            raise DriveError(f"Google Drive недоступен: {reason}") from None
+
     def upload(self, folder_id: str, path: Path, name: str) -> str:
-        content = Path(path).read_bytes()
+        size = Path(path).stat().st_size
         meta = {"name": name, "parents": [folder_id], "mimeType": "application/octet-stream"}
         headers, _ = self._send(
             "POST", f"{self.upload_url}/files?uploadType=resumable", data=json.dumps(meta).encode(),
             headers={"Content-Type": JSON_TYPE, "X-Upload-Content-Type": "application/octet-stream",
-                     "X-Upload-Content-Length": str(len(content))},
+                     "X-Upload-Content-Length": str(size)},
         )
         session = headers.get("Location")
         if not session:
             raise DriveError("Google Drive не начал загрузку.")
-        _, uploaded = self._send("PUT", session, data=content,
-                                 headers={"Content-Type": "application/octet-stream"})
+        offset = 0
+        with Path(path).open("rb") as handle:
+            while True:
+                chunk = handle.read(self.chunk_size)
+                content_range = f"bytes {offset}-{offset + len(chunk) - 1}/{size}" if chunk else f"bytes */{size}"
+                finished, uploaded = self._put_chunk(session, chunk, content_range)
+                offset += len(chunk)
+                if finished:
+                    break
+                if not chunk or offset >= size:
+                    raise DriveError("Google Drive не завершил загрузку.")
         if "id" not in uploaded:
             raise DriveError("Google Drive не подтвердил загрузку.")
         return uploaded["id"]

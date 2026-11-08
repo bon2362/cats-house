@@ -66,3 +66,19 @@ def test_unreachable_google_raises_drive_error(tmp_path):
                          api_url="http://127.0.0.1:9/drive/v3", upload_url="http://127.0.0.1:9/upload/drive/v3", timeout=2)
     with pytest.raises(DriveError, match="недоступен"):
         client.find_or_create_folder()
+
+
+def test_large_file_is_uploaded_in_chunks_from_disk(drive, tmp_path):
+    client = drive.client()
+    client.chunk_size = 256 * 1024
+    folder = client.find_or_create_folder()
+    path = tmp_path / "big.dump"
+    path.write_bytes(bytes(range(256)) * 2400)  # 614 400 bytes → 3 chunks
+    file_id = client.upload(folder, path, "big.dump")
+    assert drive.puts == [262144, 262144, 90112]
+    assert client.file_info(file_id)["md5Checksum"] == hashlib.md5(path.read_bytes()).hexdigest()
+
+
+def test_chunk_size_must_be_multiple_of_256_kib(drive):
+    client = drive.client()
+    assert client.chunk_size % (256 * 1024) == 0
