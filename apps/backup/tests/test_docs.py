@@ -8,8 +8,15 @@ def test_readme_covers_setup_and_restore():
     text = (ROOT / "README.md").read_text(encoding="utf-8")
     for needle in ("pg_read_all_data", "google-authorize.py", "In production", "healthchecks.io",
                    "vercel env add", "pg_restore --no-owner --no-privileges --exit-on-error",
-                   "verify-backup-file.py", "CATS_HOUSE_DATABASE_URL"):
+                   "verify-backup-file.py", "CATS_HOUSE_DATABASE_URL", "restore-backup.py",
+                   "--header @", "Предел размера", "tr -d"):
         assert needle in text, needle
+
+
+def test_readme_never_puts_secrets_into_command_arguments():
+    text = (ROOT / "README.md").read_text(encoding="utf-8")
+    assert "Bearer $(cat" not in text
+    assert '-d "$(cat' not in text
 
 
 def test_operations_guide_points_to_the_backup_service():

@@ -16,6 +16,9 @@ from drive_backup.pgtools import ensure_binaries
 from drive_backup.redact import redact
 from drive_backup.settings import REQUIRED, Settings, load_settings
 
+# /tmp on Vercel holds 500 MB, and ~40 MB of it is the unpacked PostgreSQL tools.
+WARN_BYTES = 300 * 1024 * 1024
+
 
 def default_runner(settings: Settings) -> dict:
     bin_dir = ensure_binaries()
@@ -50,5 +53,11 @@ def handle(authorization: Optional[str], env: Mapping[str, str], *, runner=None,
         if healthcheck:
             failure(healthcheck, message)
         return 500, {"error": message}
-    success(settings.healthcheck_url)
+    if result.get("size", 0) > WARN_BYTES:
+        megabytes = result["size"] // (1024 * 1024)
+        failure(settings.healthcheck_url,
+                f"Копия {result.get('file')} сохранена, но её размер {megabytes} МБ: у сервиса предел около 450 МБ. "
+                "Нужно менять способ копирования (см. apps/backup/README.md, «Предел размера»).")
+    else:
+        success(settings.healthcheck_url)
     return 200, result

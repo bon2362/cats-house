@@ -90,3 +90,17 @@ def test_vercel_entry_answers_401_without_secret(monkeypatch):
 
     module.handler(Socket(), ("127.0.0.1", 1), None)
     assert response.getvalue().startswith(b"HTTP/1.0 401")
+
+
+def test_large_copy_is_saved_but_owner_is_warned():
+    result = {"file": "f.dump", "size": 310 * 1024 * 1024, "kept": 5, "trashed": []}
+    status, body, pings = call(AUTH, full_env(), lambda s: result)
+    assert status == 200 and body == result
+    assert pings.ok == []
+    assert len(pings.failed) == 1
+    assert "сохранена" in pings.failed[0][1] and "310 МБ" in pings.failed[0][1]
+
+
+def test_normal_copy_is_not_a_warning():
+    status, body, pings = call(AUTH, full_env(), lambda s: {"file": "f", "size": 299 * 1024 * 1024, "kept": 1, "trashed": []})
+    assert pings.ok and not pings.failed

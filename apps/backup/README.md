@@ -81,7 +81,9 @@ python3 apps/backup/scripts/google-authorize.py ~/Downloads/client_secret_*.json
 ```
 
 Ключи сохранятся в `~/.config/cats-house/backup-google.env`. Скачанный JSON
-после этого можно удалить.
+после этого можно удалить. Если когда-нибудь понадобится выдать доступ заново,
+используйте тот же OAuth-клиент: доступ `drive.file` привязан к нему, и с новым
+клиентом сервис не увидит старую папку и заведёт новую.
 
 ### 3. Сторож healthchecks.io
 
@@ -105,8 +107,11 @@ cd apps/backup && vercel link --project cats-house-backup
 Секрет запуска (его же Vercel сам передаёт расписанию):
 
 ```bash
-openssl rand -hex 32 > ~/.config/cats-house/backup-cron.secret && chmod 600 ~/.config/cats-house/backup-cron.secret
+openssl rand -hex 32 | tr -d '\n' > ~/.config/cats-house/backup-cron.secret && chmod 600 ~/.config/cats-house/backup-cron.secret
 ```
+
+Vercel сам подставляет это значение в запрос расписания, поэтому в файле не
+должно быть перевода строки (`tr -d '\n'`).
 
 Переменные Production (значения читаются из файлов):
 
@@ -137,8 +142,17 @@ vercel deploy --prod
 
 ## Запустить копию вручную
 
+Один раз сохранить строку заголовка в файл (команда `printf` встроена в
+оболочку, секрет не попадает в аргументы процессов):
+
 ```bash
-cd apps/backup && vercel curl /api/backup -- --header "Authorization: Bearer $(cat ~/.config/cats-house/backup-cron.secret)"
+printf 'Authorization: Bearer %s\n' "$(cat ~/.config/cats-house/backup-cron.secret)" > ~/.config/cats-house/backup-cron.header && chmod 600 ~/.config/cats-house/backup-cron.header
+```
+
+Запуск:
+
+```bash
+cd apps/backup && vercel curl /api/backup -- --header @"$HOME/.config/cats-house/backup-cron.header"
 ```
 
 Ответ: `{"file": "cats-house-…Z.dump", "size": …, "kept": …, "trashed": [...]}`.
@@ -151,14 +165,17 @@ cd apps/backup && vercel curl /api/backup -- --header "Authorization: Bearer $(c
    **Databases → New database** (например `restore_ГГГГММДД`), или пустую
    локальную базу PostgreSQL 17. Строку подключения сохранить в файл, как в
    шаге 1 настройки (например `~/.config/cats-house/restore-db.url`).
-3. Восстановить. `pg_restore` 17 на Mac появляется в
-   `/tmp/cats-house-pg/postgresql-17.11.0-aarch64-apple-darwin/bin/` после
-   первого запуска скрипта проверки (раздел ниже); подойдёт и любой
-   `pg_restore` версии 17 и новее:
+3. Восстановить скриптом (нужен `apps/backup/.venv`, см. «Разработка»). Адрес
+   базы передаётся переменной окружения, а не в аргументах команды; в базу, где
+   уже есть таблицы, скрипт не восстанавливает:
 
 ```bash
-/tmp/cats-house-pg/postgresql-17.11.0-aarch64-apple-darwin/bin/pg_restore --no-owner --no-privileges --exit-on-error -d "$(cat ~/.config/cats-house/restore-db.url)" ~/Downloads/cats-house-ГГГГ-ММ-ДДTЧЧММZ.dump
+CATS_HOUSE_RESTORE_DATABASE_URL="$(cat ~/.config/cats-house/restore-db.url)" apps/backup/.venv/bin/python apps/backup/scripts/restore-backup.py ~/Downloads/cats-house-ГГГГ-ММ-ДДTЧЧММZ.dump
 ```
+
+   Скрипт выполняет обычный `pg_restore --no-owner --no-privileges --exit-on-error`
+   версии 17.11: файл копии можно восстановить и без кода проекта любым
+   `pg_restore` версии 17 и новее.
 
 4. Проверить сайт на восстановленной базе: в Vercel → `cats-house-api` →
    **Settings → Environment Variables** заменить `CATS_HOUSE_DATABASE_URL`
@@ -179,6 +196,15 @@ CATS_HOUSE_SOURCE_DATABASE_URL="$(cat ~/.config/cats-house/backup-db.url)" apps/
 Ожидаемо: «Копия восстанавливается и совпадает с базой.» Если базу правили
 после копии, расхождения в числе строк нормальны.
 
+## Предел размера
+
+Копия и распакованные программы PostgreSQL (около 40 МБ) хранятся во временной
+папке функции Vercel, а там 500 МБ. Поэтому сервис работает, пока сжатая копия
+меньше примерно 450 МБ. Когда копия больше 300 МБ, она сохраняется как обычно,
+но сторож присылает письмо «…сохранена, но её размер N МБ». Это знак, что пора
+менять способ копирования (например, перенести фото и документы из базы в
+отдельное хранилище или копировать частями). Текущий размер копии виден в Drive.
+
 ## Если пришло письмо от сторожа
 
 | Текст ошибки | Что делать |
@@ -189,6 +215,7 @@ CATS_HOUSE_SOURCE_DATABASE_URL="$(cat ~/.config/cats-house/backup-db.url)" apps/
 | «копия неполная» или «не читается» | Запустить копию вручную; если повторяется — не менять базу и разобраться с причиной |
 | «файл в Google Drive не совпал» | Запустить копию вручную; старые копии при этом не тронуты |
 | «Не заданы настройки: …» | Добавить названные переменные в Vercel и сделать Redeploy |
+| «…сохранена, но её размер N МБ» | Копия есть; см. «Предел размера» |
 
 ## Разработка
 
