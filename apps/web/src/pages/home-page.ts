@@ -9,13 +9,15 @@ const familyInitial = (person: PersonSummary) => person.display_name.trim()[0]?.
 const initials = (person: PersonSummary) => person.display_name.split(/\s+/).filter(Boolean).slice(0, 2).map((part) => part[0]).join('').toUpperCase()
 
 export class CatsHouseHome extends LitElement {
-  static properties = { connectionState: { attribute: false }, people: { attribute: false }, query: { state: true }, filter: { state: true } }
+  static properties = { connectionState: { attribute: false }, loading: { attribute: false }, people: { attribute: false }, query: { state: true }, filter: { state: true } }
   declare connectionState: ConnectionState
   declare people: PersonSummary[]
+  /** True while the catalogue request is still in flight. */
+  declare loading: boolean
   private declare query: string
   private declare filter: Filter
 
-  constructor() { super(); this.connectionState = 'loading'; this.people = []; this.query = new URLSearchParams(window.location.search).get('q') ?? ''; this.filter = 'all' }
+  constructor() { super(); this.connectionState = 'loading'; this.loading = false; this.people = []; this.query = new URLSearchParams(window.location.search).get('q') ?? ''; this.filter = 'all' }
 
   static styles = css`
     :host { display:block; min-height:calc(100vh - 4rem); background:var(--paper,#f5f5f3); color:var(--ink,#171817); }
@@ -43,6 +45,18 @@ export class CatsHouseHome extends LitElement {
     .action { border:1px solid var(--border-input,#cfcfca); border-radius:3px; color:var(--ink,#171817); font-size:.8rem; font-weight:600; padding:.55rem .7rem; text-decoration:none; white-space:nowrap; }
     .action.primary { border-color:transparent; background:var(--green-light,#e4ece7); color:var(--green,#24513f); }
     .empty { color:var(--text-2,#4a4c49); padding:2.5rem 0; }
+    .loading-note { display:inline-flex; align-items:center; gap:.5rem; color:var(--text-3,#6b6d69); font-size:.875rem; margin-left:.55rem; }
+    .spinner { width:.9rem; height:.9rem; border:2px solid var(--border,#dcdcd8); border-top-color:var(--green,#24513f); border-radius:50%; animation:spin .8s linear infinite; }
+    .sr-only { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; }
+    .skeleton { display:block; border-radius:3px; background:linear-gradient(90deg,var(--subtle,#ececea) 0%,var(--subtle,#ececea) 40%,var(--sheet,#fff) 50%,var(--subtle,#ececea) 60%,var(--subtle,#ececea) 100%); background-size:300% 100%; animation:shimmer 1.6s ease-in-out infinite; }
+    .skeleton.letter-bar { width:2rem; height:2.4rem; }
+    .skeleton.line { height:.85rem; }
+    .skeleton.line + .skeleton.line { margin-top:.5rem; }
+    .skeleton.pill { width:5.5rem; height:2.1rem; }
+    .skeleton-list { pointer-events:none; }
+    @keyframes shimmer { from { background-position:100% 0; } to { background-position:0 0; } }
+    @keyframes spin { to { transform:rotate(360deg); } }
+    @media (prefers-reduced-motion:reduce) { .skeleton { animation:none; } .spinner { animation-duration:2.4s; } }
     @media (max-width:42rem) { main { width:min(100% - 2rem,60.5rem); padding-top:2.5rem; } .group { grid-template-columns:2.5rem 1fr; } .person { grid-template-columns:2.4rem minmax(0,1fr); } .actions { grid-column:2; } .letters { display:none; } }
   `
 
@@ -51,11 +65,17 @@ export class CatsHouseHome extends LitElement {
   private get results() { const needle = normalized(this.query); return this.people.filter((person) => { const matchesWords = needle.split(/\s+/).filter(Boolean).every((word) => normalized(person.display_name).includes(word)); const matchesFilter = this.filter === 'all' || (this.filter === 'living' && person.is_living === true) || (this.filter === 'dead' && person.is_living === false); return matchesWords && matchesFilter }) }
   private get groups() { const grouped = new Map<string, PersonSummary[]>(); for (const person of [...this.results].sort((a,b) => a.display_name.localeCompare(b.display_name, 'ru'))) { const key = familyInitial(person); grouped.set(key, [...(grouped.get(key) ?? []), person]) } return [...grouped.entries()] }
 
+  /** Placeholder rows shaped like the real catalogue so the page does not jump when data arrives. */
+  private renderSkeleton() {
+    const blocks = [[62, 48, 70], [55, 66], [74, 52, 60]]
+    return html`<div class="skeleton-list" aria-hidden="true">${blocks.map((rows) => html`<section class="group"><span class="skeleton letter-bar"></span><div>${rows.map((width, index) => html`<div class="person"><span class="monogram skeleton"></span><div><span class="skeleton line" style="width:${width}%"></span><span class="skeleton line" style="width:${30 + index * 7}%"></span></div><div class="actions"><span class="skeleton pill"></span><span class="skeleton pill"></span></div></div>`)}</div></section>`)}</div>`
+  }
+
   render() {
-    const unavailable = this.connectionState === 'unavailable'; const groups = this.groups
-    return html`<main aria-live="polite"><span class="eyebrow">Семейный архив</span><h1>Люди семейного архива</h1><p class="lead">Выберите человека, чтобы открыть его страницу или построить дерево от него.</p>
-      <section class="catalogue-controls" aria-label="Каталог людей"><input class="catalogue-search" type="search" placeholder="Имя, отчество, фамилия, девичья фамилия или год" .value=${this.query} @input=${this.onSearch} /><div class="filters"><button class="filter ${this.filter === 'all' ? 'active' : ''}" @click=${() => this.setFilter('all')}>Все</button><button class="filter ${this.filter === 'living' ? 'active' : ''}" @click=${() => this.setFilter('living')}>Живущие</button><button class="filter ${this.filter === 'dead' ? 'active' : ''}" @click=${() => this.setFilter('dead')}>Умершие</button><span class="count">${this.results.length} ${this.results.length === 1 ? 'человек' : 'человек'}</span><span class="letters">${groups.map(([letter]) => html`<a href="#letter-${letter}">${letter}</a>`)}</span></div></section>
-      ${unavailable ? html`<p class="empty">Не удалось связаться с сайтом. Проверьте подключение и обновите страницу.</p>` : groups.length ? groups.map(([letter, people]) => html`<section class="group" id="letter-${letter}"><div class="letter">${letter}</div><div>${people.map((person) => html`<article class="person"><span class="monogram">${initials(person)}</span><div><a class="name" href="/people/${person.id}">${person.display_name}</a><div class="meta">${person.years ?? 'годы неизвестны'}${person.parents_label ? ` · Родители: ${person.parents_label}` : ''}</div></div><div class="actions"><a class="action" href="/people/${person.id}">Страница</a><a class="action primary" href="/tree?person=${person.id}">Дерево от него</a></div></article>`)}</div></section>`) : html`<p class="empty">${this.people.length ? 'Ничего не найдено.' : 'В семейном архиве пока нет людей.'}</p>`}
+    const unavailable = this.connectionState === 'unavailable'; const showLoading = this.loading && !unavailable; const groups = this.groups
+    return html`<main aria-live="polite" aria-busy=${showLoading ? 'true' : 'false'}><span class="eyebrow">Семейный архив</span><h1>Люди семейного архива</h1><p class="lead">Выберите человека, чтобы открыть его страницу или построить дерево от него.</p>
+      <section class="catalogue-controls" aria-label="Каталог людей"><input class="catalogue-search" type="search" placeholder="Имя, отчество, фамилия, девичья фамилия или год" .value=${this.query} @input=${this.onSearch} /><div class="filters"><button class="filter ${this.filter === 'all' ? 'active' : ''}" @click=${() => this.setFilter('all')}>Все</button><button class="filter ${this.filter === 'living' ? 'active' : ''}" @click=${() => this.setFilter('living')}>Живущие</button><button class="filter ${this.filter === 'dead' ? 'active' : ''}" @click=${() => this.setFilter('dead')}>Умершие</button>${showLoading ? html`<span class="loading-note"><span class="spinner" aria-hidden="true"></span>Загружаем архив…</span>` : html`<span class="count">${this.results.length} ${this.results.length === 1 ? 'человек' : 'человек'}</span>`}<span class="letters">${showLoading ? '' : groups.map(([letter]) => html`<a href="#letter-${letter}">${letter}</a>`)}</span></div></section>
+      ${unavailable ? html`<p class="empty">Не удалось связаться с сайтом. Проверьте подключение и обновите страницу.</p>` : showLoading ? html`<span class="sr-only">Загружаем людей семейного архива</span>${this.renderSkeleton()}` : groups.length ? groups.map(([letter, people]) => html`<section class="group" id="letter-${letter}"><div class="letter">${letter}</div><div>${people.map((person) => html`<article class="person"><span class="monogram">${initials(person)}</span><div><a class="name" href="/people/${person.id}">${person.display_name}</a><div class="meta">${person.years ?? 'годы неизвестны'}${person.parents_label ? ` · Родители: ${person.parents_label}` : ''}</div></div><div class="actions"><a class="action" href="/people/${person.id}">Страница</a><a class="action primary" href="/tree?person=${person.id}">Дерево от него</a></div></article>`)}</div></section>`) : html`<p class="empty">${this.people.length ? 'Ничего не найдено.' : 'В семейном архиве пока нет людей.'}</p>`}
     </main>`
   }
 }

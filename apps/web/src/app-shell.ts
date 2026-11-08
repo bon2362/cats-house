@@ -28,11 +28,12 @@ type PublicPerson = {
 }
 
 export class CatsHouseApp extends LitElement {
-  static properties = { connectionState: { state: true }, query: { state: true }, people: { state: true }, cataloguePeople: { state: true }, activeResult: { state: true }, person: { state: true }, ownerStatus: { state: true }, ownerError: { state: true }, hiddenPersonId: { state: true } }
+  static properties = { connectionState: { state: true }, query: { state: true }, people: { state: true }, cataloguePeople: { state: true }, catalogueLoading: { state: true }, activeResult: { state: true }, person: { state: true }, ownerStatus: { state: true }, ownerError: { state: true }, hiddenPersonId: { state: true } }
   private declare connectionState: ConnectionState
   private declare query: string
   private declare people: SearchPerson[]
   private declare cataloguePeople: PersonSummary[]
+  private declare catalogueLoading: boolean
   private declare activeResult: number
   private declare person: PublicPerson | null
   private declare ownerStatus: OwnerStatus
@@ -42,7 +43,7 @@ export class CatsHouseApp extends LitElement {
 
   constructor() {
     super()
-    this.connectionState = 'loading'; this.query = ''; this.people = []; this.cataloguePeople = []; this.activeResult = -1; this.person = null; this.ownerStatus = GUEST; this.ownerError = ''; this.hiddenPersonId = null
+    this.connectionState = 'loading'; this.query = ''; this.people = []; this.cataloguePeople = []; this.catalogueLoading = true; this.activeResult = -1; this.person = null; this.ownerStatus = GUEST; this.ownerError = ''; this.hiddenPersonId = null
   }
 
   static styles = css`
@@ -74,7 +75,7 @@ export class CatsHouseApp extends LitElement {
   connectedCallback() { super.connectedCallback(); void this.checkPublicApi(); void this.loadOwnerStatus(); void this.loadCatalogue(); void this.loadPersonFromPath() }
   disconnectedCallback() { super.disconnectedCallback(); if (this.searchTimer) window.clearTimeout(this.searchTimer) }
 
-  private async loadCatalogue() { try { const response = await fetch('/api/v1/people'); const data = response.ok ? await response.json() : []; this.cataloguePeople = Array.isArray(data) ? data : [] } catch { this.cataloguePeople = [] } }
+  private async loadCatalogue() { this.catalogueLoading = true; try { const response = await fetch('/api/v1/people'); const data = response.ok ? await response.json() : []; this.cataloguePeople = Array.isArray(data) ? data : [] } catch { this.cataloguePeople = [] } finally { this.catalogueLoading = false } }
   private async loadPersonFromPath() { const match = window.location.pathname.match(/^\/people\/([^/]+)$/); if (!match) return; const response = await fetch(`/api/v1/people/${match[1]}`); this.person = response.ok ? await response.json() : null; this.hiddenPersonId = response.status === 404 ? match[1] : null }
   private async loadOwnerStatus() { this.ownerStatus = await fetchOwnerStatus() }
   /** The header shows a guest only after the server confirms the session is closed. */
@@ -106,7 +107,7 @@ export class CatsHouseApp extends LitElement {
       <div class="header-right"><section class="search" aria-label="Поиск по семье"><input type="search" placeholder="Найти человека по имени или фамилии" .value=${this.query} @input=${this.searchPeople} @keydown=${this.onSearchKeydown} />
         ${this.people.length ? html`<div class="search-menu" role="listbox">${this.people.map((person,index) => html`<a class="search-result ${index === this.activeResult ? 'active' : ''}" href="/people/${person.id}" role="option" aria-selected=${index === this.activeResult}><span class="monogram">${this.initials(person)}</span><span><span class="result-name">${person.display_name}</span><span class="result-meta">${person.years ?? 'годы неизвестны'}${person.parents_label ? ` · родители: ${person.parents_label}` : ''}</span>${person.is_archived ? html`<span class="result-meta">скрыт</span>` : ''}</span></a>`)}<a class="all-results" href="/?q=${encodeURIComponent(this.query)}">Все результаты →</a></div>` : ''}
       </section>${this.ownerControls()}</div></header>
-      ${isLoginPage ? html`<cats-login-page .status=${this.ownerStatus} .next=${new URLSearchParams(window.location.search).get('next')} @owner-logout-request=${this.signOut}></cats-login-page>` : isTreePage ? html`<cats-tree-page .rootId=${treeRootId} .isOwner=${this.ownerStatus.authenticated}></cats-tree-page>` : !this.person && this.hiddenPersonId && this.ownerStatus.authenticated ? html`<section class="hidden-person"><cats-person-editor .personId=${this.hiddenPersonId} .standalone=${true} @person-visibility-changed=${() => this.loadPersonFromPath()}></cats-person-editor><cats-family-editor .personId=${this.hiddenPersonId} @person-changed=${() => this.loadPersonFromPath()}></cats-family-editor><cats-relative-section .personId=${this.hiddenPersonId} @person-changed=${() => this.loadPersonFromPath()}></cats-relative-section><h2>Биография</h2><cats-biography-section .personId=${this.hiddenPersonId} .isOwner=${true}></cats-biography-section><h2>Фото и документы</h2><cats-media-section .personId=${this.hiddenPersonId} .isOwner=${true}></cats-media-section></section>` : this.person ? html`<cats-person-card .person=${this.person} .isOwner=${this.ownerStatus.authenticated} @person-changed=${() => this.loadPersonFromPath()}></cats-person-card>` : html`<cats-house-home .connectionState=${this.connectionState} .people=${this.cataloguePeople}></cats-house-home>`}`
+      ${isLoginPage ? html`<cats-login-page .status=${this.ownerStatus} .next=${new URLSearchParams(window.location.search).get('next')} @owner-logout-request=${this.signOut}></cats-login-page>` : isTreePage ? html`<cats-tree-page .rootId=${treeRootId} .isOwner=${this.ownerStatus.authenticated}></cats-tree-page>` : !this.person && this.hiddenPersonId && this.ownerStatus.authenticated ? html`<section class="hidden-person"><cats-person-editor .personId=${this.hiddenPersonId} .standalone=${true} @person-visibility-changed=${() => this.loadPersonFromPath()}></cats-person-editor><cats-family-editor .personId=${this.hiddenPersonId} @person-changed=${() => this.loadPersonFromPath()}></cats-family-editor><cats-relative-section .personId=${this.hiddenPersonId} @person-changed=${() => this.loadPersonFromPath()}></cats-relative-section><h2>Биография</h2><cats-biography-section .personId=${this.hiddenPersonId} .isOwner=${true}></cats-biography-section><h2>Фото и документы</h2><cats-media-section .personId=${this.hiddenPersonId} .isOwner=${true}></cats-media-section></section>` : this.person ? html`<cats-person-card .person=${this.person} .isOwner=${this.ownerStatus.authenticated} @person-changed=${() => this.loadPersonFromPath()}></cats-person-card>` : html`<cats-house-home .connectionState=${this.connectionState} .loading=${this.catalogueLoading} .people=${this.cataloguePeople}></cats-house-home>`}`
   }
 }
 

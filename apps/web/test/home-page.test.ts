@@ -16,3 +16,20 @@ it('renders the archive catalogue grouped by surname initial', async () => {
   expect(element.shadowRoot?.textContent).toContain('К')
   expect(element.shadowRoot?.querySelector('a[href="/tree?person=1"]')).not.toBeNull()
 })
+
+it('shows a skeleton instead of the empty message while the catalogue loads', async () => {
+  const element = document.createElement('cats-house-home') as HTMLElement & { people: unknown; loading: boolean; updateComplete: Promise<void> }
+  element.loading = true
+  document.body.append(element)
+  await element.updateComplete
+
+  expect(element.shadowRoot?.textContent).not.toContain('пока нет людей')
+  expect(element.shadowRoot?.textContent).toContain('Загружаем архив')
+  expect(element.shadowRoot?.querySelectorAll('.skeleton-list .person').length).toBeGreaterThan(0)
+  expect(element.shadowRoot?.querySelector('main')?.getAttribute('aria-busy')).toBe('true')
+
+  element.loading = false
+  await element.updateComplete
+  expect(element.shadowRoot?.querySelector('.skeleton-list')).toBeNull()
+  expect(element.shadowRoot?.textContent).toContain('пока нет людей')
+})
