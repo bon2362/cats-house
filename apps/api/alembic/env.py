@@ -23,6 +23,8 @@ def run_migrations_online() -> None:
         )
         with context.begin_transaction():
             context.run_migrations()
+        # SET search_path above opened the transaction, so Alembic leaves committing to us.
+        connection.commit()
 
 
 run_migrations_online()
