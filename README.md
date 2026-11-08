@@ -21,6 +21,7 @@
 - [Спецификация продукта](docs/specs/family-tree-open-source-product-design.md)
 - [Roadmap](docs/implementation-roadmap.md)
 - [Эксплуатация опубликованного сайта](docs/operations.md)
+- [Ежедневные копии базы](apps/backup/README.md)
 - [Исторический план переезда](docs/superpowers/plans/2026-11-07-vercel-neon-migration.md)
 
 ## Публичное семейное дерево

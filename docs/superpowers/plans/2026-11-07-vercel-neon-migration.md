@@ -158,6 +158,8 @@ git commit -m "feat: add verified Neon migration workflow"
 
 ### Task 4: Preserve independent daily backups after cutover
 
+> Заменено планом `docs/superpowers/plans/2026-11-08-daily-backup-to-drive.md` (копии делает сервис на Vercel, не Mac).
+
 **Files:**
 - Create: `scripts/backup-neon.sh`, `scripts/com.cats-house.neon-backup.plist`
 - Modify: `README.md`
