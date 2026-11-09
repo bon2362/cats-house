@@ -134,11 +134,13 @@ grep '^GOOGLE_CLIENT_SECRET=' ~/.config/cats-house/backup-google.env | cut -d= -
 grep '^GOOGLE_REFRESH_TOKEN=' ~/.config/cats-house/backup-google.env | cut -d= -f2- | vercel env add GOOGLE_REFRESH_TOKEN production
 ```
 
-Отметьте переменные как **Sensitive** в Vercel, затем опубликуйте:
-
-```bash
-vercel deploy --prod
-```
+Отметьте переменные как **Sensitive** в Vercel. Проект подключён к репозиторию
+GitHub (**Settings → Git**) с Root Directory `apps/backup`, поэтому Vercel сам
+выкладывает сервис при каждой отправке в `main`. Команда `vercel deploy` из
+папки `apps/backup` не работает: с этой настройкой Vercel ищет внутри неё ещё
+одну `apps/backup`. Чтобы применить изменённые переменные без нового коммита,
+в Vercel → `cats-house-backup` → **Deployments** у последней Production-выкладки
+нажмите **Redeploy**.
 
 ## Запустить копию вручную
 
