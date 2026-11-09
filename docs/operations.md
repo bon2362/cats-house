@@ -95,8 +95,8 @@ curl --fail https://api.catshouse.online/api/v1/health
 актуальную резервную копию production.
 
 Актуальные копии делает сервис `cats-house-backup` на Vercel: каждую ночь
-стандартный `pg_dump` Neon уходит в Google Drive («Мой диск» → «Cat's House —
-копии базы»); хранится по копии за каждый из 30 дней и 12 месяцев. О сбое
+стандартный `pg_dump` Neon уходит в Google Drive («Мой диск» → «Архив» → «Cat's House» →
+«Cat's House — копии базы»); хранится по копии за каждый из 30 дней и 12 месяцев. О сбое
 пишет сторож healthchecks.io. Второй слой — встроенная история изменений Neon.
 Настройка, ручной запуск, восстановление и ежеквартальная проверка —
 [apps/backup/README.md](../apps/backup/README.md).
