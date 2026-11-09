@@ -12,8 +12,6 @@ def set_required_settings(monkeypatch):
         "CATS_HOUSE_DATABASE_URL",
         "postgresql+psycopg://cats_house:password@localhost:5432/cats_house",
     )
-    monkeypatch.setenv("CATS_HOUSE_S3_ENDPOINT", "http://localhost:9000")
-    monkeypatch.setenv("CATS_HOUSE_S3_BUCKET", "cats-house-media")
     monkeypatch.setenv("CATS_HOUSE_OWNER_EMAIL", "owner@example.test")
     monkeypatch.setenv(
         "CATS_HOUSE_OWNER_PASSWORD_HASH",
@@ -83,12 +81,12 @@ def test_development_environment_disables_secure_cookie_only_for_local_use(monke
     assert Settings().session_cookie_secure is False
 
 
-def test_settings_no_longer_need_s3(monkeypatch):
+def test_old_s3_settings_in_the_environment_are_ignored(monkeypatch):
     set_required_settings(monkeypatch)
-    monkeypatch.delenv("CATS_HOUSE_S3_ENDPOINT")
-    monkeypatch.delenv("CATS_HOUSE_S3_BUCKET")
+    monkeypatch.setenv("CATS_HOUSE_S3_ENDPOINT", "http://localhost:9000")
+    monkeypatch.setenv("CATS_HOUSE_S3_BUCKET", "cats-house-media")
 
-    assert Settings().owner_email == "owner@example.test"
+    assert not hasattr(Settings(), "s3_bucket")
 
 
 def test_vercel_production_requires_tls_database_url(monkeypatch):

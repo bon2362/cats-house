@@ -2,7 +2,7 @@ from pathlib import Path
 from typing import Literal
 from urllib.parse import parse_qs, urlparse
 
-from pydantic import AnyHttpUrl, SecretStr, field_validator, model_validator
+from pydantic import SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,9 +16,6 @@ class Settings(BaseSettings):
     )
 
     database_url: str
-    # Files are stored in the database since stage 4; kept optional so old .env files still load.
-    s3_endpoint: AnyHttpUrl | None = None
-    s3_bucket: str | None = None
     owner_email: str
     owner_password_hash: SecretStr
     owner_totp_secret: SecretStr | None = None
